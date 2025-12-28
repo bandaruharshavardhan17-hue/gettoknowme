@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Spaces from "./pages/owner/Spaces";
 import SpaceDetail from "./pages/owner/SpaceDetail";
 import ShareSpace from "./pages/owner/ShareSpace";
+import ActiveLinks from "./pages/owner/ActiveLinks";
 import PublicChat from "./pages/PublicChat";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/owner/spaces" element={<ProtectedRoute><Spaces /></ProtectedRoute>} />
             <Route path="/owner/spaces/:spaceId" element={<ProtectedRoute><SpaceDetail /></ProtectedRoute>} />
             <Route path="/owner/spaces/:spaceId/share" element={<ProtectedRoute><ShareSpace /></ProtectedRoute>} />
+            <Route path="/owner/links" element={<ProtectedRoute><ActiveLinks /></ProtectedRoute>} />
             <Route path="/s/:token" element={<PublicChat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

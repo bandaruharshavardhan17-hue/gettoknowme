@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, FolderOpen, Loader2, LogOut, Sparkles, FileText, Share2 } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, LogOut, Sparkles, FileText, Share2, Link2 } from 'lucide-react';
 
 interface Space {
   id: string;
@@ -121,10 +121,18 @@ export default function Spaces() {
             <h1 className="text-xl font-display font-bold gradient-text">Know Me</h1>
           </div>
           
-          <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link to="/owner/links">
+              <Button variant="outline" size="sm">
+                <Link2 className="w-4 h-4 mr-2" />
+                Active Links
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </header>
 
