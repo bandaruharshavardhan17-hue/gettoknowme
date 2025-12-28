@@ -9,8 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff
+  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode
 } from 'lucide-react';
+import { QRCodeDialog } from '@/components/QRCodeDialog';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -70,6 +71,9 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [voiceNoteTitle, setVoiceNoteTitle] = useState('');
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [savingVoiceNote, setSavingVoiceNote] = useState(false);
+  
+  // QR code dialog state
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -580,6 +584,15 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               size="sm"
               variant="ghost"
               className="h-7 px-2"
+              onClick={() => setQrDialogOpen(true)}
+              title="Show QR Code"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2"
               onClick={() => openLink(existingLinkToken)}
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -933,6 +946,16 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
             </Card>
           ))}
         </div>
+      )}
+
+      {/* QR Code Dialog */}
+      {existingLinkToken && (
+        <QRCodeDialog
+          open={qrDialogOpen}
+          onOpenChange={setQrDialogOpen}
+          url={`${window.location.origin}/chat/${existingLinkToken}`}
+          title="Share Chat Link"
+        />
       )}
     </div>
   );
