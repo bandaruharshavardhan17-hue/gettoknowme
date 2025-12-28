@@ -4,8 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -38,9 +36,8 @@ export default function SpaceDetail() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [newNote, setNewNote] = useState({ title: '', content: '' });
-  const [creatingNote, setCreatingNote] = useState(false);
+  const [aiInstructions, setAiInstructions] = useState('');
+  const [savingInstructions, setSavingInstructions] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -79,6 +76,7 @@ export default function SpaceDetail() {
 
       if (spaceError) throw spaceError;
       setSpace(spaceData);
+      setAiInstructions(spaceData.description || '');
 
       // Fetch documents
       const { data: docsData, error: docsError } = await supabase
@@ -171,53 +169,30 @@ export default function SpaceDetail() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleCreateNote = async () => {
-    if (!newNote.title.trim() || !newNote.content.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter both title and content',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setCreatingNote(true);
+  const handleSaveInstructions = async () => {
+    setSavingInstructions(true);
     try {
-      const { data, error } = await supabase
-        .from('documents')
-        .insert({
-          space_id: spaceId,
-          filename: newNote.title.trim(),
-          file_type: 'note',
-          content_text: newNote.content.trim(),
-          status: 'indexing' as DocumentStatus,
-        })
-        .select()
-        .single();
+      const { error } = await supabase
+        .from('spaces')
+        .update({ description: aiInstructions.trim() || null })
+        .eq('id', spaceId);
 
       if (error) throw error;
 
-      // Trigger processing
-      supabase.functions.invoke('process-document', {
-        body: { documentId: data.id }
-      }).catch(console.error);
-
-      setDocuments(prev => [data, ...prev]);
-      setNewNote({ title: '', content: '' });
-      setNoteDialogOpen(false);
-
+      setSpace(prev => prev ? { ...prev, description: aiInstructions.trim() || null } : null);
+      
       toast({
-        title: 'Note added',
-        description: 'Your note is being indexed',
+        title: 'Instructions saved',
+        description: 'AI behavior has been updated',
       });
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to create note',
+        description: 'Failed to save instructions',
         variant: 'destructive',
       });
     } finally {
-      setCreatingNote(false);
+      setSavingInstructions(false);
     }
   };
 
@@ -351,53 +326,37 @@ export default function SpaceDetail() {
             )}
             Upload Files
           </Button>
-          
-          <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <StickyNote className="w-4 h-4 mr-2" />
-                Add Note
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="font-display">Add a Note</DialogTitle>
-                <DialogDescription>
-                  Add text content directly to your knowledge base
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="noteTitle">Title</Label>
-                  <Input
-                    id="noteTitle"
-                    placeholder="Note title"
-                    value={newNote.title}
-                    onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="noteContent">Content</Label>
-                  <Textarea
-                    id="noteContent"
-                    placeholder="Write your note content here..."
-                    value={newNote.content}
-                    onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
-                    rows={6}
-                  />
-                </div>
-                <Button 
-                  onClick={handleCreateNote} 
-                  className="w-full gradient-primary text-primary-foreground"
-                  disabled={creatingNote}
-                >
-                  {creatingNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  Add Note
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
+
+        {/* AI Instructions */}
+        <Card className="mb-8">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-display flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              AI Instructions
+            </CardTitle>
+            <CardDescription>
+              Tell the AI what to say and what not to say when answering questions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              placeholder="e.g., Only answer questions about our products. Don't discuss competitors. Always be friendly and professional. If unsure, say 'I don't know'..."
+              value={aiInstructions}
+              onChange={(e) => setAiInstructions(e.target.value)}
+              rows={4}
+              className="resize-none"
+            />
+            <Button 
+              onClick={handleSaveInstructions}
+              disabled={savingInstructions}
+              size="sm"
+            >
+              {savingInstructions && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Save Instructions
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Documents list */}
         {documents.length === 0 ? (
