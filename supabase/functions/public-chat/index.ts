@@ -77,83 +77,118 @@ serve(async (req) => {
       const ownerInstructions = shareLink.spaces.description || defaultFallback;
 
       console.log('Using vector store:', vectorStoreId);
-      console.log('Owner instructions:', shareLink.spaces.description ? 'Yes' : 'None');
 
-      // First, search the vector store for relevant content
-      const searchQuery = message;
-      console.log('Searching for:', searchQuery);
+      // Get document content from our database as fallback/supplement
+      const { data: documents } = await supabase
+        .from('documents')
+        .select('filename, content_text')
+        .eq('space_id', shareLink.spaces.id)
+        .not('content_text', 'is', null);
 
-      // Use OpenAI's vector store search
-      const searchResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/search`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-          'OpenAI-Beta': 'assistants=v2',
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          max_num_results: 5,
-        }),
-      });
+      // Also get chunks for more content
+      const { data: chunks } = await supabase
+        .from('document_chunks')
+        .select('content, documents!inner(space_id)')
+        .eq('documents.space_id', shareLink.spaces.id)
+        .limit(20);
 
-      let context = '';
-      let citations: string[] = [];
+      let documentContext = '';
+      
+      // Add document content
+      if (documents && documents.length > 0) {
+        for (const doc of documents) {
+          if (doc.content_text) {
+            documentContext += `\n--- ${doc.filename} ---\n${doc.content_text}\n`;
+          }
+        }
+      }
 
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
-        console.log('Search results:', JSON.stringify(searchData).slice(0, 500));
-        
-        if (searchData.data && searchData.data.length > 0) {
-          // Extract content from search results
-          for (const result of searchData.data) {
-            if (result.content && Array.isArray(result.content)) {
-              for (const content of result.content) {
-                if (content.type === 'text' && content.text) {
-                  context += content.text + '\n\n';
-                  // Add first 100 chars as citation
-                  if (content.text.length > 20) {
-                    citations.push(content.text.slice(0, 150) + '...');
+      // Add chunk content
+      if (chunks && chunks.length > 0) {
+        documentContext += '\n--- Additional Content ---\n';
+        for (const chunk of chunks) {
+          documentContext += chunk.content + '\n';
+        }
+      }
+
+      console.log('Document context length:', documentContext.length);
+
+      // Try vector store search with a more relevant query
+      const searchQueries = [message, 'name experience education skills background'];
+      let vectorContext = '';
+
+      for (const query of searchQueries) {
+        try {
+          const searchResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/search`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json',
+              'OpenAI-Beta': 'assistants=v2',
+            },
+            body: JSON.stringify({
+              query: query,
+              max_num_results: 10,
+            }),
+          });
+
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            if (searchData.data && searchData.data.length > 0) {
+              for (const result of searchData.data) {
+                if (result.content && Array.isArray(result.content)) {
+                  for (const content of result.content) {
+                    if (content.type === 'text' && content.text) {
+                      vectorContext += content.text + '\n\n';
+                    }
                   }
                 }
               }
             }
           }
+        } catch (e) {
+          console.error('Vector search error:', e);
         }
-      } else {
-        const errorText = await searchResponse.text();
-        console.error('Vector store search error:', searchResponse.status, errorText);
+        
+        if (vectorContext.length > 0) break;
       }
 
-      console.log('Found context length:', context.length);
-      console.log('Citations count:', citations.length);
+      console.log('Vector context length:', vectorContext.length);
 
-      // Build the system prompt with context
-      const systemPrompt = context.length > 0 
-        ? `You are a helpful AI assistant. Answer the user's question based ONLY on the following information from the documents:
+      // Combine all available context
+      const allContext = (vectorContext + documentContext).trim();
+      console.log('Total context length:', allContext.length);
 
----DOCUMENT CONTENT---
-${context}
----END DOCUMENT CONTENT---
+      // Build the system prompt
+      let systemPrompt: string;
+      
+      if (allContext.length > 100) {
+        systemPrompt = `You are a helpful AI assistant. Answer questions based ONLY on the following document content:
 
-RULES:
-1. Answer based ONLY on the document content above.
-2. If the user asks about your name, education, experience, skills, or any personal info - look for it in the document content.
-3. Be conversational and answer as if YOU are the person described in the documents.
-4. If the specific information is not in the documents, say: "${ownerInstructions}"
-5. Never make up information.`
-        : `You are a helpful AI assistant. The user asked a question but no relevant information was found in the documents.
+---DOCUMENTS---
+${allContext.slice(0, 15000)}
+---END DOCUMENTS---
 
+CRITICAL RULES:
+1. Answer ONLY based on the document content above.
+2. For personal questions (name, experience, skills, education), find the info in the documents and answer as if YOU are that person.
+3. Example: If documents show "Harsha Vardhan Bandaru" as the name, and user asks "What's your name?", say "My name is Harsha Vardhan Bandaru."
+4. Be conversational and helpful.
+5. If the specific info is NOT in the documents, say: "${ownerInstructions}"
+6. Never make up information not in the documents.`;
+      } else {
+        systemPrompt = `You are a helpful AI assistant. No document content was found for this query.
 Your response should be: "${ownerInstructions}"`;
+      }
 
-      // Build messages for chat
+      // Build messages
       const messages = [
         { role: 'system', content: systemPrompt },
         ...(history || []).slice(-6).map((m: any) => ({ role: m.role, content: m.content })),
         { role: 'user', content: message }
       ];
 
-      // Use standard Chat Completions API
+      // Use Chat Completions API
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -193,7 +228,6 @@ Your response should be: "${ownerInstructions}"`;
           }
 
           let buffer = '';
-          let sentCitations = false;
           
           while (true) {
             const { done, value } = await reader.read();
@@ -207,15 +241,6 @@ Your response should be: "${ownerInstructions}"`;
               if (!line.startsWith('data: ')) continue;
               const data = line.slice(6).trim();
               if (data === '[DONE]') {
-                // Send citations at the end if we have them
-                if (citations.length > 0 && !sentCitations) {
-                  const citationChunk = {
-                    citations: citations.slice(0, 3),
-                    choices: [{ delta: { content: '' }, index: 0 }]
-                  };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(citationChunk)}\n\n`));
-                  sentCitations = true;
-                }
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 continue;
               }
