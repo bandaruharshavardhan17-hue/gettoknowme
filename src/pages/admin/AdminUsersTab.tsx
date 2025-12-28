@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { User, FolderOpen, FileText, Link2 } from 'lucide-react';
+import { User, FolderOpen, FileText, Link2, Eye } from 'lucide-react';
 
 interface ProfileWithStats {
   id: string;
@@ -18,6 +21,9 @@ interface ProfileWithStats {
 }
 
 export function AdminUsersTab() {
+  const navigate = useNavigate();
+  const { startImpersonating } = useImpersonation();
+  
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin', 'users'],
     queryFn: async () => {
@@ -127,6 +133,7 @@ export function AdminUsersTab() {
                   Links
                 </div>
               </TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -150,11 +157,29 @@ export function AdminUsersTab() {
                 <TableCell className="text-center">
                   <Badge variant="outline">{user.links_count}</Badge>
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      startImpersonating({
+                        id: user.id,
+                        email: user.email,
+                        display_name: user.display_name,
+                      });
+                      navigate('/owner/spaces');
+                    }}
+                    className="text-muted-foreground hover:text-primary"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View As
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
             {(!users || users.length === 0) && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   No users found
                 </TableCell>
               </TableRow>

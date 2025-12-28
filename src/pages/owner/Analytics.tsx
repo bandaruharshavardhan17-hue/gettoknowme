@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Eye, Link2, TrendingUp, Clock } from 'lucide-react';
@@ -24,21 +25,24 @@ export default function Analytics() {
   const [totalViews, setTotalViews] = useState(0);
   
   const { user } = useAuth();
+  const { getEffectiveUserId } = useImpersonation();
   const { toast } = useToast();
+  
+  const effectiveUserId = getEffectiveUserId(user?.id);
 
   useEffect(() => {
-    if (user) fetchAnalytics();
-  }, [user]);
+    if (effectiveUserId) fetchAnalytics();
+  }, [effectiveUserId]);
 
   const fetchAnalytics = async () => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     
     try {
       // First get user's space IDs
       const { data: userSpaces } = await supabase
         .from('spaces')
         .select('id')
-        .eq('owner_id', user.id);
+        .eq('owner_id', effectiveUserId);
       
       const spaceIds = userSpaces?.map(s => s.id) || [];
       

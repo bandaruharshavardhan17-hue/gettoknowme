@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,14 +39,17 @@ export default function SpacesTab() {
   const [newSpace, setNewSpace] = useState({ name: '', description: '' });
   
   const { user } = useAuth();
+  const { getEffectiveUserId, isImpersonating } = useImpersonation();
   const { toast } = useToast();
+  
+  const effectiveUserId = getEffectiveUserId(user?.id);
 
   useEffect(() => {
-    if (user) fetchSpaces();
-  }, [user]);
+    if (effectiveUserId) fetchSpaces();
+  }, [effectiveUserId]);
 
   const fetchSpaces = async () => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     
     try {
       const { data, error } = await supabase
@@ -54,7 +58,7 @@ export default function SpacesTab() {
           *,
           documents(count)
         `)
-        .eq('owner_id', user.id)
+        .eq('owner_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

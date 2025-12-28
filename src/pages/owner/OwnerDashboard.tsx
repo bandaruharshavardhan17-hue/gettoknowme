@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { ImpersonationBanner } from '@/components/ImpersonationBanner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +16,7 @@ export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState('spaces');
   const { signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
+  const { isImpersonating, impersonatedUser } = useImpersonation();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -22,6 +25,7 @@ export default function OwnerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-accent/10">
+      <ImpersonationBanner />
       {/* Header */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b border-border/50">
         <div className="container flex items-center justify-between h-14 px-4">
