@@ -1,0 +1,780 @@
+openapi: 3.0.3
+info:
+  title: Know Me API
+  description: |
+    REST API for Know Me - a knowledge-based Q&A platform with shareable public chat links.
+    
+    ## Authentication
+    All endpoints (except `public-chat`) require authentication via Bearer token.
+    Get an access token by signing in via Supabase Auth.
+    
+    ## Rate Limits
+    - 100 requests per minute for authenticated endpoints
+    - 30 requests per minute for public-chat endpoint per IP
+    
+    ## Errors
+    All errors return JSON with an `error` field containing a human-readable message.
+  version: 1.0.0
+  contact:
+    name: Know Me Support
+  license:
+    name: MIT
+
+servers:
+  - url: https://oqvvffeaffyoapdtpmjr.supabase.co/functions/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Spaces
+    description: Manage knowledge spaces
+  - name: Documents
+    description: Manage documents within spaces
+  - name: Links
+    description: Manage shareable chat links
+  - name: Analytics
+    description: View usage analytics
+  - name: Public Chat
+    description: Public chat endpoint (no auth required)
+
+paths:
+  /api-spaces:
+    get:
+      tags: [Spaces]
+      summary: List all spaces
+      description: Returns all spaces owned by the authenticated user
+      parameters:
+        - name: id
+          in: query
+          description: Get a specific space by ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SpaceListResponse'
+                  - $ref: '#/components/schemas/SpaceSingleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Spaces]
+      summary: Create a new space
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpaceRequest'
+      responses:
+        '201':
+          description: Space created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpaceSingleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags: [Spaces]
+      summary: Update a space
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSpaceRequest'
+      responses:
+        '200':
+          description: Space updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpaceSingleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Spaces]
+      summary: Delete a space
+      description: Deletes a space and all its documents and share links
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Space deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api-documents:
+    get:
+      tags: [Documents]
+      summary: List documents
+      parameters:
+        - name: space_id
+          in: query
+          description: Filter by space ID
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: query
+          description: Get a specific document by ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentListResponse'
+                  - $ref: '#/components/schemas/DocumentSingleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Documents]
+      summary: Create a text document
+      description: Creates a new text document and automatically chunks it for search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentSingleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Documents]
+      summary: Delete a document
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api-links:
+    get:
+      tags: [Links]
+      summary: List share links
+      parameters:
+        - name: space_id
+          in: query
+          description: Filter by space ID
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: query
+          description: Get a specific link by ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LinkListResponse'
+                  - $ref: '#/components/schemas/LinkSingleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Links]
+      summary: Create a share link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLinkRequest'
+      responses:
+        '201':
+          description: Link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkSingleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Links]
+      summary: Update a share link
+      description: Update link name or revoke/unrevoke it
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLinkRequest'
+      responses:
+        '200':
+          description: Link updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkSingleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Links]
+      summary: Delete a share link
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Link deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api-analytics:
+    get:
+      tags: [Analytics]
+      summary: Get analytics
+      description: |
+        Returns usage analytics. Can be filtered by space or link.
+        Without filters, returns overall analytics for all spaces.
+      parameters:
+        - name: space_id
+          in: query
+          description: Get analytics for a specific space
+          schema:
+            type: string
+            format: uuid
+        - name: link_id
+          in: query
+          description: Get analytics for a specific link
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /public-chat:
+    post:
+      tags: [Public Chat]
+      summary: Public chat endpoint
+      description: |
+        Chat with a knowledge space using a share token.
+        No authentication required - uses share token instead.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ValidateLinkRequest'
+                - $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateLinkResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream for chat responses
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          description: Rate limit exceeded
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Supabase access token
+
+  responses:
+    BadRequest:
+      description: Bad request - missing or invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized - invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # Common schemas
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "Resource not found"
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    # Space schemas
+    Space:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Product Knowledge Base"
+        description:
+          type: string
+          nullable: true
+          description: AI instructions for this space
+          example: "Only answer questions about our products"
+        document_count:
+          type: integer
+          example: 5
+        link_count:
+          type: integer
+          example: 2
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SpaceListResponse:
+      type: object
+      properties:
+        spaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/Space'
+
+    SpaceSingleResponse:
+      type: object
+      properties:
+        space:
+          $ref: '#/components/schemas/Space'
+
+    CreateSpaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "My Knowledge Base"
+        description:
+          type: string
+          description: AI instructions for answering questions
+          example: "Be helpful and concise"
+
+    UpdateSpaceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    # Document schemas
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        space_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+          example: "product-guide.txt"
+        file_type:
+          type: string
+          enum: [txt, pdf, image, note]
+          example: "txt"
+        status:
+          type: string
+          enum: [uploading, indexing, ready, failed]
+          example: "ready"
+        content_text:
+          type: string
+          nullable: true
+          description: Text content (for text documents)
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DocumentListResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+
+    DocumentSingleResponse:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+
+    CreateDocumentRequest:
+      type: object
+      required: [space_id, filename, content]
+      properties:
+        space_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+          example: "notes.txt"
+        content:
+          type: string
+          description: Text content of the document
+          example: "This is my document content..."
+        file_type:
+          type: string
+          default: "txt"
+          example: "txt"
+
+    # Link schemas
+    ShareLink:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        space_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          example: "abc123def456"
+        name:
+          type: string
+          nullable: true
+          example: "Public Link"
+        url:
+          type: string
+          format: uri
+          example: "https://example.com/s/abc123def456"
+        space_name:
+          type: string
+          example: "My Knowledge Base"
+        view_count:
+          type: integer
+          example: 42
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+
+    LinkListResponse:
+      type: object
+      properties:
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShareLink'
+
+    LinkSingleResponse:
+      type: object
+      properties:
+        link:
+          $ref: '#/components/schemas/ShareLink'
+
+    CreateLinkRequest:
+      type: object
+      required: [space_id]
+      properties:
+        space_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Website Chat Widget"
+
+    UpdateLinkRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        revoked:
+          type: boolean
+          description: Set to true to revoke the link
+
+    # Analytics schemas
+    AnalyticsResponse:
+      type: object
+      properties:
+        analytics:
+          type: object
+          properties:
+            total_views:
+              type: integer
+              example: 1234
+            total_active_links:
+              type: integer
+              example: 10
+            avg_views_per_link:
+              type: integer
+              example: 123
+            space_id:
+              type: string
+              format: uuid
+              description: Present when filtering by space
+            space_name:
+              type: string
+              description: Present when filtering by space
+            spaces:
+              type: array
+              description: Present for overall analytics
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  total_views:
+                    type: integer
+                  active_links:
+                    type: integer
+            top_links:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  space_name:
+                    type: string
+                  view_count:
+                    type: integer
+                  last_used_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+            links:
+              type: array
+              description: Present when filtering by space
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  token:
+                    type: string
+                  view_count:
+                    type: integer
+                  last_used_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  revoked:
+                    type: boolean
+                  created_at:
+                    type: string
+                    format: date-time
+
+    # Public Chat schemas
+    ValidateLinkRequest:
+      type: object
+      required: [token, action]
+      properties:
+        token:
+          type: string
+          description: Share link token
+          example: "abc123def456"
+        action:
+          type: string
+          enum: [validate]
+          example: "validate"
+
+    ValidateLinkResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          example: true
+        space:
+          type: object
+          properties:
+            name:
+              type: string
+              example: "My Knowledge Base"
+            description:
+              type: string
+              nullable: true
+        message:
+          type: string
+          description: Error message if invalid
+
+    ChatRequest:
+      type: object
+      required: [token, action, message]
+      properties:
+        token:
+          type: string
+          description: Share link token
+          example: "abc123def456"
+        action:
+          type: string
+          enum: [chat]
+          example: "chat"
+        message:
+          type: string
+          description: User's question
+          example: "What are the key features?"
+        history:
+          type: array
+          description: Previous messages for context
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
