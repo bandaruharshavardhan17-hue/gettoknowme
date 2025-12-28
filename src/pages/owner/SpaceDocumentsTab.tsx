@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, PenLine
+  ClipboardPaste, PenLine, Link, Copy, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -56,6 +56,10 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [quickAddContent, setQuickAddContent] = useState('');
   const [savingQuickAdd, setSavingQuickAdd] = useState(false);
+  
+  // Share link state
+  const [creatingLink, setCreatingLink] = useState(false);
+  const [newLinkToken, setNewLinkToken] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -383,6 +387,49 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     return <File className="w-5 h-5" />;
   };
 
+  const handleCreateChatLink = async () => {
+    setCreatingLink(true);
+    try {
+      const { data, error } = await supabase
+        .from('share_links')
+        .insert({
+          space_id: spaceId,
+          name: 'Chat Link',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setNewLinkToken(data.token);
+      toast({
+        title: 'Chat link created!',
+        description: 'Your shareable chat link is ready',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create chat link',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingLink(false);
+    }
+  };
+
+  const copyLink = (token: string) => {
+    const url = `${window.location.origin}/chat/${token}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: 'Link copied!',
+      description: 'Chat link copied to clipboard',
+    });
+  };
+
+  const openLink = (token: string) => {
+    window.open(`${window.location.origin}/chat/${token}`, '_blank');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -393,44 +440,83 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
   return (
     <div className="space-y-6">
-      {/* Actions */}
-      <div className="flex flex-wrap gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
-          multiple
-          className="hidden"
-          onChange={handleFileUpload}
-        />
-        <Button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="gradient-primary text-primary-foreground"
-        >
-          {uploading ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Upload className="w-4 h-4 mr-2" />
-          )}
-          Upload Files
-        </Button>
-        
-        <Button 
-          variant="outline"
-          onClick={() => setNoteDialogOpen(true)}
-        >
-          <ClipboardPaste className="w-4 h-4 mr-2" />
-          Paste Content
-        </Button>
-        
-        <Button 
-          variant="outline"
-          onClick={() => setQuickAddOpen(true)}
-        >
-          <PenLine className="w-4 h-4 mr-2" />
-          Quick Add Info
-        </Button>
+      {/* Actions Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
+            multiple
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <Button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="gradient-primary text-primary-foreground"
+          >
+            {uploading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Upload className="w-4 h-4 mr-2" />
+            )}
+            Upload Files
+          </Button>
+          
+          <Button 
+            variant="outline"
+            onClick={() => setNoteDialogOpen(true)}
+          >
+            <ClipboardPaste className="w-4 h-4 mr-2" />
+            Paste Content
+          </Button>
+          
+          <Button 
+            variant="outline"
+            onClick={() => setQuickAddOpen(true)}
+          >
+            <PenLine className="w-4 h-4 mr-2" />
+            Quick Add Info
+          </Button>
+        </div>
+
+        {/* Create Chat Link Button */}
+        {newLinkToken ? (
+          <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-3 py-2">
+            <Link className="w-4 h-4 text-success" />
+            <span className="text-sm font-medium text-success">Link Created!</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2"
+              onClick={() => copyLink(newLinkToken)}
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2"
+              onClick={() => openLink(newLinkToken)}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            onClick={handleCreateChatLink}
+            disabled={creatingLink}
+            className="bg-success hover:bg-success/90 text-success-foreground"
+          >
+            {creatingLink ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Link className="w-4 h-4 mr-2" />
+            )}
+            Create Chat Link
+          </Button>
+        )}
       </div>
 
       {/* Note Dialog */}
