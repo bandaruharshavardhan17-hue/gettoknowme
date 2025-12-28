@@ -37,6 +37,15 @@ serve(async (req) => {
     }
 
     if (action === 'validate') {
+      // Increment view count when link is accessed
+      await supabase
+        .from('share_links')
+        .update({ 
+          view_count: (shareLink.view_count || 0) + 1,
+          last_used_at: new Date().toISOString()
+        })
+        .eq('id', shareLink.id);
+
       return new Response(JSON.stringify({ 
         valid: true, 
         space: { 

@@ -127,26 +127,32 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          last_used_at: string | null
           name: string | null
           revoked: boolean
           space_id: string
           token: string
+          view_count: number
         }
         Insert: {
           created_at?: string
           id?: string
+          last_used_at?: string | null
           name?: string | null
           revoked?: boolean
           space_id: string
           token?: string
+          view_count?: number
         }
         Update: {
           created_at?: string
           id?: string
+          last_used_at?: string | null
           name?: string | null
           revoked?: boolean
           space_id?: string
           token?: string
+          view_count?: number
         }
         Relationships: [
           {
