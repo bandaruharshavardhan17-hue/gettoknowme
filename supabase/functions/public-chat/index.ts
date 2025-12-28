@@ -82,10 +82,16 @@ serve(async (req) => {
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           input: messages,
-          instructions: `You are a helpful AI assistant for "${shareLink.spaces.name}". 
-Answer questions ONLY based on the documents in the file search tool. 
-If the answer is not found in the documents, respond with: "I don't know from the provided documents."
-Always cite the source document and relevant snippets when answering.
+          instructions: `You are a helpful AI assistant for "${shareLink.spaces.name}".
+
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. Answer questions ONLY based on information found in the documents via file search.
+2. If the answer is NOT found in the documents, you MUST respond: "I don't know from the provided documents."
+3. NEVER make up, guess, or infer information that isn't explicitly in the documents.
+4. Always cite the source document and include relevant quotes when answering.
+5. If asked about something outside the document scope, politely decline and explain you can only answer based on the uploaded documents.
+
+${shareLink.spaces.description ? `OWNER INSTRUCTIONS:\n${shareLink.spaces.description}\n` : ''}
 Be helpful, accurate, and concise.`,
           tools: [
             {
