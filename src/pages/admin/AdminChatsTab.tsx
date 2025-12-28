@@ -1,21 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Eye } from 'lucide-react';
 
 interface ChatSummary {
   share_link_id: string;
+  space_id: string;
   space_name: string;
+  owner_id: string;
   owner_email: string | null;
+  owner_name: string | null;
   messages_count: number;
   last_message_at: string;
 }
 
 export function AdminChatsTab() {
+  const navigate = useNavigate();
+  const { startImpersonating } = useImpersonation();
+
   const { data: chats, isLoading } = useQuery({
     queryKey: ['admin', 'chats'],
     queryFn: async () => {
@@ -37,7 +46,7 @@ export function AdminChatsTab() {
       // Get all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, email');
+        .select('id, email, display_name');
 
       if (profilesError) throw profilesError;
 
@@ -62,8 +71,11 @@ export function AdminChatsTab() {
 
         summaries.push({
           share_link_id: shareLinkId,
+          space_id: firstMsg.space_id,
           space_name: space?.name || 'Unknown Space',
+          owner_id: space?.owner_id || '',
           owner_email: owner?.email || null,
+          owner_name: owner?.display_name || null,
           messages_count: msgs.length,
           last_message_at: msgs[0].created_at,
         });
@@ -117,6 +129,7 @@ export function AdminChatsTab() {
               <TableHead>Owner</TableHead>
               <TableHead>Last Activity</TableHead>
               <TableHead className="text-center">Messages</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -132,11 +145,31 @@ export function AdminChatsTab() {
                 <TableCell className="text-center">
                   <Badge variant="secondary">{chat.messages_count}</Badge>
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (chat.owner_id) {
+                        startImpersonating({
+                          id: chat.owner_id,
+                          email: chat.owner_email,
+                          display_name: chat.owner_name,
+                        });
+                        navigate(`/owner/spaces/${chat.space_id}?tab=history`);
+                      }
+                    }}
+                    className="text-muted-foreground hover:text-primary"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View History
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
             {(!chats || chats.length === 0) && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No chat sessions found
                 </TableCell>
               </TableRow>

@@ -1,17 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { FolderOpen, FileText, Link2 } from 'lucide-react';
+import { FolderOpen, FileText, Link2, Eye } from 'lucide-react';
 
 interface SpaceWithDetails {
   id: string;
   name: string;
   description: string | null;
   created_at: string;
+  owner_id: string;
   owner_email: string | null;
   owner_name: string | null;
   documents_count: number;
@@ -19,6 +23,9 @@ interface SpaceWithDetails {
 }
 
 export function AdminSpacesTab() {
+  const navigate = useNavigate();
+  const { startImpersonating } = useImpersonation();
+
   const { data: spaces, isLoading } = useQuery({
     queryKey: ['admin', 'spaces'],
     queryFn: async () => {
@@ -65,6 +72,7 @@ export function AdminSpacesTab() {
           name: space.name,
           description: space.description,
           created_at: space.created_at,
+          owner_id: space.owner_id,
           owner_email: owner?.email || null,
           owner_name: owner?.display_name || null,
           documents_count: docsCount,
@@ -124,6 +132,7 @@ export function AdminSpacesTab() {
                   Links
                 </div>
               </TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -154,11 +163,29 @@ export function AdminSpacesTab() {
                 <TableCell className="text-center">
                   <Badge variant="outline">{space.links_count}</Badge>
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      startImpersonating({
+                        id: space.owner_id,
+                        email: space.owner_email,
+                        display_name: space.owner_name,
+                      });
+                      navigate(`/owner/spaces/${space.id}`);
+                    }}
+                    className="text-muted-foreground hover:text-primary"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Space
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
             {(!spaces || spaces.length === 0) && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   No spaces found
                 </TableCell>
               </TableRow>
