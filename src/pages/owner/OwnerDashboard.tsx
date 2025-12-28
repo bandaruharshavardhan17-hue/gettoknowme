@@ -16,7 +16,7 @@ export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState('spaces');
   const { signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
-  const { isImpersonating, impersonatedUser } = useImpersonation();
+  const { isImpersonating } = useImpersonation();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -37,7 +37,7 @@ export default function OwnerDashboard() {
           </div>
           
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {isAdmin && !isImpersonating && (
               <Button 
                 variant="outline" 
                 size="sm" 

@@ -39,7 +39,7 @@ export default function SpacesTab() {
   const [newSpace, setNewSpace] = useState({ name: '', description: '' });
   
   const { user } = useAuth();
-  const { getEffectiveUserId, isImpersonating } = useImpersonation();
+  const { getEffectiveUserId } = useImpersonation();
   const { toast } = useToast();
   
   const effectiveUserId = getEffectiveUserId(user?.id);
