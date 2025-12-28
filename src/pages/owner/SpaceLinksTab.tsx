@@ -120,14 +120,17 @@ export default function SpaceLinksTab({ spaceId }: SpaceLinksTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Link to={`/owner/spaces/${spaceId}/share`}>
-          <Button size="sm" className="gradient-primary text-primary-foreground">
-            <Plus className="w-4 h-4 mr-2" />
-            New Link
-          </Button>
-        </Link>
-      </div>
+      {/* Only show "New Link" if no links exist - each space has one link */}
+      {links.length === 0 && (
+        <div className="flex justify-end">
+          <Link to={`/owner/spaces/${spaceId}/share`}>
+            <Button size="sm" className="gradient-primary text-primary-foreground">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Link
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {links.length === 0 ? (
         <Card className="border-dashed border-2 border-border/50 bg-card/50">
@@ -135,7 +138,7 @@ export default function SpaceLinksTab({ spaceId }: SpaceLinksTabProps) {
             <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
               <Link2 className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No share links yet</h3>
+            <h3 className="text-lg font-semibold mb-2">No share link yet</h3>
             <p className="text-muted-foreground text-center max-w-sm mb-6">
               Create a share link to let others chat with your knowledge base
             </p>

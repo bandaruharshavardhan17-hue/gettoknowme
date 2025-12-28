@@ -14,7 +14,7 @@ info:
     
     ## Errors
     All errors return JSON with an `error` field containing a human-readable message.
-  version: 1.0.0
+  version: 1.1.0
   contact:
     name: Know Me Support
   license:
@@ -38,6 +38,8 @@ tags:
     description: View usage analytics
   - name: Public Chat
     description: Public chat endpoint (no auth required)
+  - name: Admin
+    description: Admin-only endpoints for platform management
 
 paths:
   /api-spaces:
@@ -69,6 +71,7 @@ paths:
     post:
       tags: [Spaces]
       summary: Create a new space
+      description: Creates a new space. A default share link is automatically created for each space.
       requestBody:
         required: true
         content:
@@ -221,6 +224,7 @@ paths:
     get:
       tags: [Links]
       summary: List share links
+      description: Each space has one share link that is auto-created when the space is created.
       parameters:
         - name: space_id
           in: query
@@ -251,6 +255,7 @@ paths:
     post:
       tags: [Links]
       summary: Create a share link
+      description: Creates a share link for a space. Note that each space automatically gets a default link on creation.
       requestBody:
         required: true
         content:
@@ -386,6 +391,122 @@ paths:
         '429':
           description: Rate limit exceeded
 
+  /api-admin:
+    get:
+      tags: [Admin]
+      summary: Get admin data
+      description: |
+        Admin-only endpoint to retrieve platform data.
+        Requires admin role.
+      parameters:
+        - name: resource
+          in: query
+          required: true
+          description: Resource type to retrieve
+          schema:
+            type: string
+            enum: [users, spaces, chats, analytics]
+        - name: owner_id
+          in: query
+          description: Filter spaces by owner (for resource=spaces)
+          schema:
+            type: string
+            format: uuid
+        - name: space_id
+          in: query
+          description: Filter chats by space (for resource=chats)
+          schema:
+            type: string
+            format: uuid
+        - name: link_id
+          in: query
+          description: Filter chats by link (for resource=chats)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AdminUsersResponse'
+                  - $ref: '#/components/schemas/AdminSpacesResponse'
+                  - $ref: '#/components/schemas/AdminChatsResponse'
+                  - $ref: '#/components/schemas/AdminAnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Admin]
+      summary: Manage user roles
+      description: Add or remove admin roles from users
+      parameters:
+        - name: resource
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [roles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManageRoleRequest'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '201':
+          description: Role added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    delete:
+      tags: [Admin]
+      summary: Delete resources
+      description: Delete users or spaces as admin
+      parameters:
+        - name: resource
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [users, spaces]
+        - name: id
+          in: query
+          required: true
+          description: ID of the resource to delete
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resource deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -402,6 +523,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
       description: Unauthorized - invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden - insufficient permissions (admin required)
       content:
         application/json:
           schema:
@@ -430,6 +557,9 @@ components:
         success:
           type: boolean
           example: true
+        message:
+          type: string
+          example: "Operation completed"
 
     # Space schemas
     Space:
@@ -451,7 +581,7 @@ components:
           example: 5
         link_count:
           type: integer
-          example: 2
+          example: 1
         created_at:
           type: string
           format: date-time
@@ -580,11 +710,11 @@ components:
         name:
           type: string
           nullable: true
-          example: "Public Link"
+          example: "Default Link"
         url:
           type: string
           format: uri
-          example: "https://example.com/s/abc123def456"
+          example: "https://example.com/chat/abc123def456"
         space_name:
           type: string
           example: "My Knowledge Base"
@@ -778,3 +908,129 @@ components:
                 enum: [user, assistant]
               content:
                 type: string
+
+    # Admin schemas
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        is_admin:
+          type: boolean
+        spaces_count:
+          type: integer
+        documents_count:
+          type: integer
+        links_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    AdminUsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+
+    AdminSpacesResponse:
+      type: object
+      properties:
+        spaces:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Space'
+              - type: object
+                properties:
+                  owner_email:
+                    type: string
+                  owner_name:
+                    type: string
+                    nullable: true
+
+    AdminChatsResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              space_id:
+                type: string
+                format: uuid
+              share_link_id:
+                type: string
+                format: uuid
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+              share_links:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  name:
+                    type: string
+              spaces:
+                type: object
+                properties:
+                  name:
+                    type: string
+
+    AdminAnalyticsResponse:
+      type: object
+      properties:
+        analytics:
+          type: object
+          properties:
+            total_users:
+              type: integer
+            total_spaces:
+              type: integer
+            total_documents:
+              type: integer
+            total_links:
+              type: integer
+            total_views:
+              type: integer
+            total_chat_messages:
+              type: integer
+
+    ManageRoleRequest:
+      type: object
+      required: [user_id, action]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [add, remove]
+          description: Action to perform on the role
+        role:
+          type: string
+          enum: [admin, user]
+          default: admin
+          description: Role to add or remove

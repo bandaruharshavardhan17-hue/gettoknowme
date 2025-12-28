@@ -266,6 +266,130 @@ Content-Type: application/json
 
 ---
 
+### 6. Admin API (`/api-admin`)
+
+**Requires admin role** - only users with admin role can access these endpoints.
+
+#### List all users
+```http
+GET /api-admin?resource=users
+```
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": "uuid",
+      "email": "user@example.com",
+      "display_name": "John Doe",
+      "avatar_url": "https://...",
+      "is_admin": false,
+      "spaces_count": 5,
+      "documents_count": 20,
+      "links_count": 5,
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### List all spaces (admin view)
+```http
+GET /api-admin?resource=spaces
+GET /api-admin?resource=spaces&owner_id=<user_id>
+```
+**Response:**
+```json
+{
+  "spaces": [
+    {
+      "id": "uuid",
+      "name": "Space Name",
+      "owner_email": "user@example.com",
+      "owner_name": "John Doe",
+      "document_count": 5,
+      "link_count": 1
+    }
+  ]
+}
+```
+
+#### List chat messages
+```http
+GET /api-admin?resource=chats
+GET /api-admin?resource=chats&space_id=<space_id>
+GET /api-admin?resource=chats&link_id=<link_id>
+```
+**Response:**
+```json
+{
+  "messages": [
+    {
+      "id": "uuid",
+      "role": "user",
+      "content": "Question here",
+      "created_at": "2024-01-01T00:00:00Z",
+      "share_links": { "token": "abc123", "name": "Default Link" },
+      "spaces": { "name": "Space Name" }
+    }
+  ]
+}
+```
+
+#### Get platform analytics
+```http
+GET /api-admin?resource=analytics
+```
+**Response:**
+```json
+{
+  "analytics": {
+    "total_users": 100,
+    "total_spaces": 250,
+    "total_documents": 1000,
+    "total_links": 250,
+    "total_views": 5000,
+    "total_chat_messages": 10000
+  }
+}
+```
+
+#### Add admin role to user
+```http
+POST /api-admin?resource=roles
+Content-Type: application/json
+
+{
+  "user_id": "<user_id>",
+  "action": "add",
+  "role": "admin"
+}
+```
+
+#### Remove admin role from user
+```http
+POST /api-admin?resource=roles
+Content-Type: application/json
+
+{
+  "user_id": "<user_id>",
+  "action": "remove",
+  "role": "admin"
+}
+```
+
+#### Delete a user (and all their data)
+```http
+DELETE /api-admin?resource=users&id=<user_id>
+```
+
+#### Delete a space (admin)
+```http
+DELETE /api-admin?resource=spaces&id=<space_id>
+```
+
+---
+
 ## Error Responses
 
 All endpoints return errors in this format:
@@ -278,6 +402,7 @@ All endpoints return errors in this format:
 Common HTTP status codes:
 - `400` - Bad Request (missing required fields)
 - `401` - Unauthorized (invalid or missing token)
+- `403` - Forbidden (admin access required)
 - `404` - Not Found
 - `405` - Method Not Allowed
 - `429` - Rate Limited
@@ -310,4 +435,31 @@ const response = await fetch('https://oqvvffeaffyoapdtpmjr.supabase.co/functions
   }
 });
 const { spaces } = await response.json();
+```
+
+## Example: Admin API Usage
+
+```typescript
+// Get all users (admin only)
+const response = await fetch('https://oqvvffeaffyoapdtpmjr.supabase.co/functions/v1/api-admin?resource=users', {
+  headers: {
+    'Authorization': `Bearer ${adminAccessToken}`,
+    'Content-Type': 'application/json'
+  }
+});
+const { users } = await response.json();
+
+// Add admin role
+await fetch('https://oqvvffeaffyoapdtpmjr.supabase.co/functions/v1/api-admin?resource=roles', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${adminAccessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    user_id: 'user-uuid',
+    action: 'add',
+    role: 'admin'
+  })
+});
 ```
