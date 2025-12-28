@@ -8,10 +8,9 @@ import { ProfileDropdown } from '@/components/ProfileDropdown';
 import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, FolderOpen, Link2, BarChart3, Shield, HelpCircle } from 'lucide-react';
+import { Sparkles, FolderOpen, BarChart3, Shield, HelpCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SpacesTab from './SpacesTab';
-import ActiveLinksTab from './ActiveLinksTab';
 import Analytics from './Analytics';
 
 export default function OwnerDashboard() {
@@ -105,16 +104,11 @@ export default function OwnerDashboard() {
 
       <main className="container px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="spaces" className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4" />
               <span className="hidden sm:inline">Your Spaces</span>
               <span className="sm:hidden">Spaces</span>
-            </TabsTrigger>
-            <TabsTrigger value="links" className="flex items-center gap-2">
-              <Link2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Active Links</span>
-              <span className="sm:hidden">Links</span>
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
@@ -124,10 +118,6 @@ export default function OwnerDashboard() {
 
           <TabsContent value="spaces">
             <SpacesTab />
-          </TabsContent>
-          
-          <TabsContent value="links">
-            <ActiveLinksTab />
           </TabsContent>
           
           <TabsContent value="analytics">
