@@ -570,6 +570,8 @@ USING (has_role(auth.uid(), 'admin'));
 │   │
 │   ├── hooks/
 │   │   ├── useIsAdmin.ts          # Admin role check
+│   │   ├── useVoiceRecording.ts   # Voice input hook
+│   │   ├── useTextToSpeech.ts     # TTS playback hook
 │   │   └── use-mobile.tsx         # Responsive detection
 │   │
 │   ├── integrations/supabase/
@@ -578,18 +580,20 @@ USING (has_role(auth.uid(), 'admin'));
 │   │
 │   ├── pages/
 │   │   ├── Login.tsx              # Auth page
-│   │   ├── PublicChat.tsx         # Visitor chat interface
+│   │   ├── PublicChat.tsx         # Visitor chat (voice + TTS)
 │   │   ├── owner/
 │   │   │   ├── OwnerDashboard.tsx # Main dashboard
-│   │   │   ├── SpaceDetail.tsx    # Single space view
+│   │   │   ├── SpaceDetail.tsx    # Space view (3 tabs)
 │   │   │   ├── SpacesTab.tsx      # Space list
-│   │   │   ├── SpaceDocumentsTab.tsx
-│   │   │   ├── SpaceLinksTab.tsx
-│   │   │   └── Analytics.tsx
+│   │   │   ├── SpaceDocumentsTab.tsx  # Docs + single chat link
+│   │   │   ├── SpaceChatHistoryTab.tsx
+│   │   │   ├── SpaceAnalyticsTab.tsx
+│   │   │   └── ShareSpace.tsx
 │   │   └── admin/
 │   │       ├── AdminDashboard.tsx
 │   │       ├── AdminUsersTab.tsx
-│   │       └── AdminSpacesTab.tsx
+│   │       ├── AdminSpacesTab.tsx
+│   │       └── AdminChatsTab.tsx
 │   │
 │   └── lib/
 │       └── utils.ts               # cn() helper
@@ -603,7 +607,10 @@ USING (has_role(auth.uid(), 'admin'));
 │   │   ├── api-analytics/index.ts
 │   │   ├── api-admin/index.ts
 │   │   ├── public-chat/index.ts
-│   │   └── process-document/index.ts
+│   │   ├── process-document/index.ts
+│   │   ├── voice-to-text/index.ts   # Whisper transcription
+│   │   ├── text-to-speech/index.ts  # OpenAI TTS
+│   │   └── generate-content/index.ts
 │   └── migrations/                # SQL migrations
 │
 ├── docs/
@@ -613,6 +620,18 @@ USING (has_role(auth.uid(), 'admin'));
 │
 └── index.html
 ```
+
+### Space Detail Tabs (Simplified)
+
+The space detail page now has **3 tabs** (Links tab removed for simplicity):
+
+| Tab | Component | Purpose |
+|-----|-----------|---------|
+| **Documents** | `SpaceDocumentsTab` | Upload files, add notes, voice notes, manage single chat link |
+| **History** | `SpaceChatHistoryTab` | View conversation history |
+| **Analytics** | `SpaceAnalyticsTab` | View usage stats |
+
+**Key simplification**: Each space has ONE chat link, created/displayed directly in the Documents tab. No separate Links management needed.
 
 ---
 
