@@ -41,10 +41,12 @@ export default function SpacesTab() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchSpaces();
-  }, []);
+    if (user) fetchSpaces();
+  }, [user]);
 
   const fetchSpaces = async () => {
+    if (!user) return;
+    
     try {
       const { data, error } = await supabase
         .from('spaces')
@@ -52,6 +54,7 @@ export default function SpacesTab() {
           *,
           documents(count)
         `)
+        .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

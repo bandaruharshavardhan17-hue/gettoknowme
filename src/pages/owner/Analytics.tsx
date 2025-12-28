@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Eye, Link2, TrendingUp, Clock } from 'lucide-react';
@@ -22,17 +23,35 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [totalViews, setTotalViews] = useState(0);
   
+  const { user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    if (user) fetchAnalytics();
+  }, [user]);
 
   const fetchAnalytics = async () => {
+    if (!user) return;
+    
     try {
+      // First get user's space IDs
+      const { data: userSpaces } = await supabase
+        .from('spaces')
+        .select('id')
+        .eq('owner_id', user.id);
+      
+      const spaceIds = userSpaces?.map(s => s.id) || [];
+      
+      if (spaceIds.length === 0) {
+        setLinks([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('share_links')
         .select('*, spaces(id, name)')
+        .in('space_id', spaceIds)
         .eq('revoked', false)
         .order('view_count', { ascending: false });
 

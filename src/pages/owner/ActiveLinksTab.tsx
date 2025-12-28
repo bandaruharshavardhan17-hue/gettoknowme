@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,17 +40,35 @@ export default function ActiveLinksTab() {
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
+  const { user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchActiveLinks();
-  }, []);
+    if (user) fetchActiveLinks();
+  }, [user]);
 
   const fetchActiveLinks = async () => {
+    if (!user) return;
+    
     try {
+      // First get user's space IDs
+      const { data: userSpaces } = await supabase
+        .from('spaces')
+        .select('id')
+        .eq('owner_id', user.id);
+      
+      const spaceIds = userSpaces?.map(s => s.id) || [];
+      
+      if (spaceIds.length === 0) {
+        setLinks([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('share_links')
         .select('*, spaces(id, name)')
+        .in('space_id', spaceIds)
         .eq('revoked', false)
         .order('created_at', { ascending: false });
 
