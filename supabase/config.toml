@@ -12,3 +12,15 @@ verify_jwt = false
 
 [functions.public-chat]
 verify_jwt = false
+
+[functions.api-spaces]
+verify_jwt = false
+
+[functions.api-links]
+verify_jwt = false
+
+[functions.api-documents]
+verify_jwt = false
+
+[functions.api-analytics]
+verify_jwt = false
