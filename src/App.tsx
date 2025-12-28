@@ -7,10 +7,9 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
-import Spaces from "./pages/owner/Spaces";
+import OwnerDashboard from "./pages/owner/OwnerDashboard";
 import SpaceDetail from "./pages/owner/SpaceDetail";
 import ShareSpace from "./pages/owner/ShareSpace";
-import ActiveLinks from "./pages/owner/ActiveLinks";
 import PublicChat from "./pages/PublicChat";
 import NotFound from "./pages/NotFound";
 
@@ -26,10 +25,9 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/owner/spaces" element={<ProtectedRoute><Spaces /></ProtectedRoute>} />
+            <Route path="/owner/spaces" element={<ProtectedRoute><OwnerDashboard /></ProtectedRoute>} />
             <Route path="/owner/spaces/:spaceId" element={<ProtectedRoute><SpaceDetail /></ProtectedRoute>} />
             <Route path="/owner/spaces/:spaceId/share" element={<ProtectedRoute><ShareSpace /></ProtectedRoute>} />
-            <Route path="/owner/links" element={<ProtectedRoute><ActiveLinks /></ProtectedRoute>} />
             <Route path="/s/:token" element={<PublicChat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
