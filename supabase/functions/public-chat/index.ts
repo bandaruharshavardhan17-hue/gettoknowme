@@ -152,6 +152,7 @@ Be helpful, accurate, and concise.`,
 
               try {
                 const event = JSON.parse(data);
+                console.log('Event type:', event.type);
                 
                 // Handle different event types from Responses API
                 if (event.type === 'response.output_text.delta') {
