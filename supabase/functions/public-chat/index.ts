@@ -64,25 +64,8 @@ serve(async (req) => {
         });
       }
 
-      // Build messages for OpenAI
-      const messages = [
-        ...(history || []).map((m: any) => ({ role: m.role, content: m.content })),
-        { role: 'user', content: message }
-      ];
-
-      // Use OpenAI Responses API with file_search
-      console.log('Using vector store:', vectorStoreId);
-      
-      const response = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          input: messages,
-          instructions: `You are "${shareLink.spaces.name}", a helpful AI assistant.
+      // Build system prompt with owner instructions
+      const systemPrompt = `You are "${shareLink.spaces.name}", a helpful AI assistant.
 
 ABOUT YOU:
 - Your name is "${shareLink.spaces.name}"
@@ -90,18 +73,41 @@ ABOUT YOU:
 
 CRITICAL RULES - YOU MUST FOLLOW THESE:
 1. For questions about YOUR NAME or WHAT YOU ARE: Use the information above.
-2. For ALL OTHER questions: Answer ONLY based on information found in the documents via file search.
-3. If the answer is NOT found in the documents, respond: "I don't have that information in my documents."
+2. For ALL OTHER questions: You MUST use the file_search tool to find information in the documents.
+3. If the file_search returns no results or the answer is NOT found, say: "I don't have that information in my documents."
 4. NEVER make up, guess, or infer information that isn't explicitly in the documents.
-5. Always cite the source document and include relevant quotes when answering factual questions.
-6. If asked about something outside the document scope, politely explain you can only answer based on the uploaded documents.
+5. When you find information, cite it and include relevant quotes.
 
-${shareLink.spaces.description ? `OWNER INSTRUCTIONS (follow these carefully):\n${shareLink.spaces.description}\n` : ''}
-Be helpful, accurate, and concise.`,
+${shareLink.spaces.description ? `OWNER INSTRUCTIONS (you MUST follow these):\n${shareLink.spaces.description}` : ''}
+
+Be helpful, accurate, and concise.`;
+
+      // Build messages for OpenAI
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map((m: any) => ({ role: m.role, content: m.content })),
+        { role: 'user', content: message }
+      ];
+
+      console.log('Using vector store:', vectorStoreId);
+      console.log('System prompt includes owner instructions:', !!shareLink.spaces.description);
+      
+      // Use Chat Completions API with file_search tool
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
           tools: [
             {
               type: 'file_search',
-              vector_store_ids: [vectorStoreId],
+              file_search: {
+                vector_store_ids: [vectorStoreId],
+              }
             }
           ],
           stream: true,
@@ -117,10 +123,10 @@ Be helpful, accurate, and concise.`,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-        throw new Error('AI service error');
+        throw new Error(`AI service error: ${errorText}`);
       }
 
-      // Transform OpenAI Responses API stream to standard format
+      // Stream the response directly
       const reader = response.body?.getReader();
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
@@ -152,53 +158,11 @@ Be helpful, accurate, and concise.`,
 
               try {
                 const event = JSON.parse(data);
-                console.log('Event type:', event.type);
-                
-                // Handle different event types from Responses API
-                if (event.type === 'response.output_text.delta') {
-                  // Convert to chat completions format
-                  const chunk = {
-                    choices: [{
-                      delta: { content: event.delta },
-                      index: 0,
-                    }]
-                  };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-                } else if (event.type === 'response.completed') {
-                  // Extract citations if available
-                  const output = event.response?.output;
-                  if (output && Array.isArray(output)) {
-                    for (const item of output) {
-                      if (item.type === 'message' && item.content) {
-                        for (const content of item.content) {
-                          if (content.annotations) {
-                            // Send citations as a special message
-                            const citations = content.annotations
-                              .filter((a: any) => a.type === 'file_citation')
-                              .map((a: any) => ({
-                                text: a.text,
-                                file_id: a.file_citation?.file_id,
-                                quote: a.file_citation?.quote,
-                              }));
-                            
-                            if (citations.length > 0) {
-                              const citationChunk = {
-                                choices: [{
-                                  delta: { citations },
-                                  index: 0,
-                                }]
-                              };
-                              controller.enqueue(encoder.encode(`data: ${JSON.stringify(citationChunk)}\n\n`));
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                // Forward chat completion chunks directly
+                if (event.choices?.[0]?.delta?.content) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
                 }
               } catch (e) {
-                // Skip malformed JSON
                 console.error('Failed to parse event:', e);
               }
             }
