@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Sparkles, FolderOpen, Link2, BarChart3 } from 'lucide-react';
+import { LogOut, Sparkles, FolderOpen, Link2, BarChart3, Shield } from 'lucide-react';
 import SpacesTab from './SpacesTab';
 import ActiveLinksTab from './ActiveLinksTab';
 import Analytics from './Analytics';
@@ -11,6 +13,8 @@ import Analytics from './Analytics';
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState('spaces');
   const { signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
@@ -28,10 +32,23 @@ export default function OwnerDashboard() {
             <h1 className="text-lg font-display font-bold gradient-text">Know Me</h1>
           </div>
           
-          <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => navigate('/admin')}
+                className="border-destructive/50 text-destructive hover:bg-destructive/10"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Admin
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </header>
 
