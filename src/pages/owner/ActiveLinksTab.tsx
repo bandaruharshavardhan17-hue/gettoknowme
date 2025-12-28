@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,21 +42,24 @@ export default function ActiveLinksTab() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
   const { user } = useAuth();
+  const { getEffectiveUserId } = useImpersonation();
   const { toast } = useToast();
+  
+  const effectiveUserId = getEffectiveUserId(user?.id);
 
   useEffect(() => {
-    if (user) fetchActiveLinks();
-  }, [user]);
+    if (effectiveUserId) fetchActiveLinks();
+  }, [effectiveUserId]);
 
   const fetchActiveLinks = async () => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     
     try {
       // First get user's space IDs
       const { data: userSpaces } = await supabase
         .from('spaces')
         .select('id')
-        .eq('owner_id', user.id);
+        .eq('owner_id', effectiveUserId);
       
       const spaceIds = userSpaces?.map(s => s.id) || [];
       
