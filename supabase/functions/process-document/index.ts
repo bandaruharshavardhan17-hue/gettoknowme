@@ -54,6 +54,9 @@ serve(async (req) => {
       textContent = await fileData.text();
     }
 
+    // Sanitize text: remove null characters that PostgreSQL can't store
+    textContent = textContent.replace(/\x00/g, '');
+
     if (!textContent.trim()) {
       await supabase.from('documents').update({ 
         status: 'failed', 
