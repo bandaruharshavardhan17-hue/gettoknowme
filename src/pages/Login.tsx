@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -22,16 +22,35 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
 
   // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/owner/spaces';
+      navigate(from, { replace: true });
+    }
+  }, [user, authLoading, navigate, location.state]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // If user is logged in, don't render the form (useEffect will redirect)
   if (user) {
-    const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/owner/spaces';
-    navigate(from, { replace: true });
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   const validateForm = () => {
