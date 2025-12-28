@@ -31,6 +31,7 @@ const App = () => (
             <Route path="/owner/spaces/:spaceId/share" element={<ProtectedRoute><ShareSpace /></ProtectedRoute>} />
             <Route path="/owner/test" element={<ProtectedRoute><TestRunner /></ProtectedRoute>} />
             <Route path="/s/:token" element={<PublicChat />} />
+            <Route path="/chat/:token" element={<PublicChat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
