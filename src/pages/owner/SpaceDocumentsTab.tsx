@@ -62,7 +62,8 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   
   // Share link state
   const [creatingLink, setCreatingLink] = useState(false);
-  const [newLinkToken, setNewLinkToken] = useState<string | null>(null);
+  const [existingLinkToken, setExistingLinkToken] = useState<string | null>(null);
+  const [loadingLink, setLoadingLink] = useState(true);
   
   // Voice recording dialog state
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
@@ -89,7 +90,28 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
   useEffect(() => {
     fetchDocuments();
+    fetchExistingLink();
   }, [spaceId]);
+
+  const fetchExistingLink = async () => {
+    try {
+      const { data } = await supabase
+        .from('share_links')
+        .select('token')
+        .eq('space_id', spaceId)
+        .eq('revoked', false)
+        .limit(1)
+        .single();
+
+      if (data) {
+        setExistingLinkToken(data.token);
+      }
+    } catch {
+      // No existing link
+    } finally {
+      setLoadingLink(false);
+    }
+  };
 
   useEffect(() => {
     setAiInstructions(description || '');
@@ -449,7 +471,7 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
       if (error) throw error;
 
-      setNewLinkToken(data.token);
+      setExistingLinkToken(data.token);
       toast({
         title: 'Chat link created!',
         description: 'Your shareable chat link is ready',
@@ -537,16 +559,20 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
           </Button>
         </div>
 
-        {/* Create Chat Link Button */}
-        {newLinkToken ? (
+        {/* Chat Link Button */}
+        {loadingLink ? (
+          <div className="flex items-center gap-2 px-3 py-2">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : existingLinkToken ? (
           <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-3 py-2">
             <Link className="w-4 h-4 text-success" />
-            <span className="text-sm font-medium text-success">Link Created!</span>
+            <span className="text-sm font-medium text-success">Chat Link</span>
             <Button
               size="sm"
               variant="ghost"
               className="h-7 px-2"
-              onClick={() => copyLink(newLinkToken)}
+              onClick={() => copyLink(existingLinkToken)}
             >
               <Copy className="w-3.5 h-3.5" />
             </Button>
@@ -554,7 +580,7 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               size="sm"
               variant="ghost"
               className="h-7 px-2"
-              onClick={() => openLink(newLinkToken)}
+              onClick={() => openLink(existingLinkToken)}
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </Button>
