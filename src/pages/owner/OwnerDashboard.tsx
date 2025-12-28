@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -9,29 +9,45 @@ import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sparkles, FolderOpen, Link2, BarChart3, Shield, HelpCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import SpacesTab from './SpacesTab';
 import ActiveLinksTab from './ActiveLinksTab';
 import Analytics from './Analytics';
 
-const TUTORIAL_COMPLETED_KEY = 'knowme_tutorial_completed';
-
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState('spaces');
   const [showTutorial, setShowTutorial] = useState(false);
+  const { user } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { isImpersonating } = useImpersonation();
   const navigate = useNavigate();
 
-  // Check if this is a first-time user
+  // Check if this is a first-time user (tutorial not completed in DB)
   useEffect(() => {
-    const tutorialCompleted = localStorage.getItem(TUTORIAL_COMPLETED_KEY);
-    if (!tutorialCompleted) {
-      setShowTutorial(true);
-    }
-  }, []);
+    const checkTutorialStatus = async () => {
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('tutorial_completed')
+        .eq('id', user.id)
+        .single();
+      
+      if (data && !data.tutorial_completed) {
+        setShowTutorial(true);
+      }
+    };
+    
+    checkTutorialStatus();
+  }, [user]);
 
-  const handleTutorialComplete = () => {
-    localStorage.setItem(TUTORIAL_COMPLETED_KEY, 'true');
+  const handleTutorialComplete = async () => {
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ tutorial_completed: true })
+        .eq('id', user.id);
+    }
     setShowTutorial(false);
   };
 
