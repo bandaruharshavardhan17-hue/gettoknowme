@@ -50,6 +50,24 @@ export default function SpaceDetail() {
     fetchSpaceAndDocuments();
   }, [spaceId]);
 
+  // Poll for status updates on documents that are still processing
+  useEffect(() => {
+    const hasProcessing = documents.some(d => d.status === 'indexing' || d.status === 'uploading');
+    if (!hasProcessing) return;
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('space_id', spaceId)
+        .order('created_at', { ascending: false });
+      
+      if (data) setDocuments(data);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [documents, spaceId]);
+
   const fetchSpaceAndDocuments = async () => {
     try {
       // Fetch space
