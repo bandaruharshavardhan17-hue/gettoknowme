@@ -79,13 +79,11 @@ serve(async (req) => {
         { role: 'user', content: message }
       ];
 
-      // Build instructions with owner's custom instructions
-      const ownerInstructions = shareLink.spaces.description 
-        ? `\n\nOWNER INSTRUCTIONS (you MUST follow these carefully):\n${shareLink.spaces.description}`
-        : '';
+      const defaultFallback = "I don't have that information in the provided documents.";
+      const fallbackMessage = shareLink.spaces.description || defaultFallback;
 
       console.log('Using vector store:', vectorStoreId);
-      console.log('Owner instructions:', ownerInstructions ? 'Yes' : 'None');
+      console.log('Owner instructions:', shareLink.spaces.description ? 'Yes' : 'None');
       
       // Use OpenAI Responses API with file_search
       const response = await fetch('https://api.openai.com/v1/responses', {
@@ -97,19 +95,18 @@ serve(async (req) => {
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           input: messages,
-          instructions: `You are "${shareLink.spaces.name}", a helpful AI assistant.
-
-ABOUT YOU:
-- Your name is "${shareLink.spaces.name}"
-- You are an AI assistant that answers questions based on uploaded documents
+          instructions: `You are a helpful AI assistant for "${shareLink.spaces.name}". Your job is to answer questions ONLY based on the uploaded documents.
 
 CRITICAL RULES:
-1. For questions about YOUR NAME or WHAT YOU ARE: Use the information above.
-2. For ALL OTHER questions: Search the documents using file_search and answer based on what you find.
-3. If the file_search finds relevant information, use it to answer and cite the source.
-4. If no relevant information is found in the documents, follow the owner's instructions below.
+1. ALWAYS use file_search to look up information in the documents before answering ANY question.
+2. For questions like "What is your name?", "Who are you?", "Tell me about yourself" - search the documents for personal information (like a resume or bio) and answer based on what you find.
+3. If the file_search finds relevant information, use it to answer accurately.
+4. If NO relevant information is found in the documents, respond with: "${fallbackMessage}"
 5. NEVER make up information that isn't in the documents.
-6. Be helpful, accurate, and concise.${ownerInstructions}`,
+6. NEVER say you are an AI or that you don't have friends - instead search the documents and answer based on what's there.
+7. Be helpful, accurate, and conversational.
+
+Remember: You represent the information in the documents. If someone asks personal questions, look for that info in the uploaded files (resume, bio, etc.) and answer as if you ARE that person.`,
           tools: [
             {
               type: 'file_search',
