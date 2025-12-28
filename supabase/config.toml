@@ -8,7 +8,7 @@ extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [functions.process-document]
-verify_jwt = true
+verify_jwt = false
 
 [functions.public-chat]
 verify_jwt = false
