@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +44,8 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [uploading, setUploading] = useState(false);
   const [aiInstructions, setAiInstructions] = useState(description || '');
   const [savingInstructions, setSavingInstructions] = useState(false);
+  const [instructionsSaved, setInstructionsSaved] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Note dialog state
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -71,7 +73,58 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
   useEffect(() => {
     setAiInstructions(description || '');
+    setInstructionsSaved(false);
   }, [description]);
+
+  // Auto-save AI instructions with debounce
+  const saveInstructions = useCallback(async (instructions: string) => {
+    setSavingInstructions(true);
+    setInstructionsSaved(false);
+    try {
+      const { error } = await supabase
+        .from('spaces')
+        .update({ description: instructions.trim() || null })
+        .eq('id', spaceId);
+
+      if (error) throw error;
+      setInstructionsSaved(true);
+      
+      // Hide the saved indicator after 2 seconds
+      setTimeout(() => setInstructionsSaved(false), 2000);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save instructions',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingInstructions(false);
+    }
+  }, [spaceId, toast]);
+
+  const handleInstructionsChange = (value: string) => {
+    setAiInstructions(value);
+    setInstructionsSaved(false);
+    
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Set new timeout for auto-save (1 second debounce)
+    saveTimeoutRef.current = setTimeout(() => {
+      saveInstructions(value);
+    }, 1000);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Poll for status updates on documents that are still processing
   useEffect(() => {
@@ -177,31 +230,6 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleSaveInstructions = async () => {
-    setSavingInstructions(true);
-    try {
-      const { error } = await supabase
-        .from('spaces')
-        .update({ description: aiInstructions.trim() || null })
-        .eq('id', spaceId);
-
-      if (error) throw error;
-      
-      toast({
-        title: 'Instructions saved',
-        description: 'AI behavior has been updated',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to save instructions',
-        variant: 'destructive',
-      });
-    } finally {
-      setSavingInstructions(false);
-    }
   };
 
   const handleDeleteDocument = async (doc: Document) => {
@@ -634,18 +662,24 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
           <Textarea
             placeholder="e.g., Only answer questions about our products. Don't discuss competitors. Always be friendly and professional. If unsure, say 'I don't know'..."
             value={aiInstructions}
-            onChange={(e) => setAiInstructions(e.target.value)}
+            onChange={(e) => handleInstructionsChange(e.target.value)}
             rows={4}
             className="resize-none"
           />
-          <Button 
-            onClick={handleSaveInstructions}
-            disabled={savingInstructions}
-            size="sm"
-          >
-            {savingInstructions && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-            Save Instructions
-          </Button>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
+            {savingInstructions && (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Saving...</span>
+              </>
+            )}
+            {instructionsSaved && !savingInstructions && (
+              <>
+                <CheckCircle className="w-3 h-3 text-green-500" />
+                <span className="text-green-600">Saved</span>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
