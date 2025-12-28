@@ -562,7 +562,8 @@ USING (has_role(auth.uid(), 'admin'));
 │   │   ├── OnboardingTutorial.tsx # First-time user tutorial
 │   │   ├── ProfileDropdown.tsx    # User menu
 │   │   ├── ProtectedRoute.tsx     # Auth guard
-│   │   └── AdminRoute.tsx         # Admin guard
+│   │   ├── AdminRoute.tsx         # Admin guard
+│   │   └── QRCodeDialog.tsx       # QR code display/share dialog
 │   │
 │   ├── contexts/
 │   │   ├── AuthContext.tsx        # Auth state provider
@@ -585,10 +586,10 @@ USING (has_role(auth.uid(), 'admin'));
 │   │   │   ├── OwnerDashboard.tsx # Main dashboard
 │   │   │   ├── SpaceDetail.tsx    # Space view (3 tabs)
 │   │   │   ├── SpacesTab.tsx      # Space list
-│   │   │   ├── SpaceDocumentsTab.tsx  # Docs + single chat link
+│   │   │   ├── SpaceDocumentsTab.tsx  # Docs + chat link + QR code
 │   │   │   ├── SpaceChatHistoryTab.tsx
 │   │   │   ├── SpaceAnalyticsTab.tsx
-│   │   │   └── ShareSpace.tsx
+│   │   │   └── ShareSpace.tsx     # Manage links + QR codes
 │   │   └── admin/
 │   │       ├── AdminDashboard.tsx
 │   │       ├── AdminUsersTab.tsx
@@ -632,6 +633,19 @@ The space detail page now has **3 tabs** (Links tab removed for simplicity):
 | **Analytics** | `SpaceAnalyticsTab` | View usage stats |
 
 **Key simplification**: Each space has ONE chat link, created/displayed directly in the Documents tab. No separate Links management needed.
+
+### Sharing Features
+
+#### QR Code Sharing
+Share links can be distributed via QR codes for easy mobile access:
+
+| Feature | Description |
+|---------|-------------|
+| **Show QR** | Display scannable QR code in modal dialog |
+| **Download** | Save QR code as PNG image |
+| **Share** | Native share (mobile) or copy link (desktop) |
+
+The `QRCodeDialog` component (`src/components/QRCodeDialog.tsx`) uses `qrcode.react` library with high error correction (Level H) for reliable scanning.
 
 ---
 
