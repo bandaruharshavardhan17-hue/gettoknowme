@@ -215,10 +215,22 @@ Your response should be: "${ownerInstructions}"`;
         throw new Error('AI service error');
       }
 
-      // Stream the response
+      // Save user message to chat history
+      await supabase
+        .from('chat_messages')
+        .insert({
+          share_link_id: shareLink.id,
+          space_id: shareLink.spaces.id,
+          role: 'user',
+          content: message,
+        });
+
+      // Stream the response and collect it
       const reader = response.body?.getReader();
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
+
+      let fullAssistantResponse = '';
 
       const stream = new ReadableStream({
         async start(controller) {
@@ -241,6 +253,17 @@ Your response should be: "${ownerInstructions}"`;
               if (!line.startsWith('data: ')) continue;
               const data = line.slice(6).trim();
               if (data === '[DONE]') {
+                // Save assistant response to chat history
+                if (fullAssistantResponse.trim()) {
+                  await supabase
+                    .from('chat_messages')
+                    .insert({
+                      share_link_id: shareLink.id,
+                      space_id: shareLink.spaces.id,
+                      role: 'assistant',
+                      content: fullAssistantResponse.trim(),
+                    });
+                }
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 continue;
               }
@@ -248,6 +271,7 @@ Your response should be: "${ownerInstructions}"`;
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.choices?.[0]?.delta?.content) {
+                  fullAssistantResponse += parsed.choices[0].delta.content;
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
                 }
               } catch (e) {
