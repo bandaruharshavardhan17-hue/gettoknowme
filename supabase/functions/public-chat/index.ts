@@ -64,36 +64,22 @@ serve(async (req) => {
         });
       }
 
-      // Build system prompt with owner instructions
-      const systemPrompt = `You are "${shareLink.spaces.name}", a helpful AI assistant.
-
-ABOUT YOU:
-- Your name is "${shareLink.spaces.name}"
-- You are an AI assistant that answers questions based on uploaded documents
-
-CRITICAL RULES - YOU MUST FOLLOW THESE:
-1. For questions about YOUR NAME or WHAT YOU ARE: Use the information above.
-2. For ALL OTHER questions: You MUST use the file_search tool to find information in the documents.
-3. If the file_search returns no results or the answer is NOT found, say: "I don't have that information in my documents."
-4. NEVER make up, guess, or infer information that isn't explicitly in the documents.
-5. When you find information, cite it and include relevant quotes.
-
-${shareLink.spaces.description ? `OWNER INSTRUCTIONS (you MUST follow these):\n${shareLink.spaces.description}` : ''}
-
-Be helpful, accurate, and concise.`;
-
       // Build messages for OpenAI
       const messages = [
-        { role: 'system', content: systemPrompt },
         ...(history || []).map((m: any) => ({ role: m.role, content: m.content })),
         { role: 'user', content: message }
       ];
 
+      // Build instructions with owner's custom instructions
+      const ownerInstructions = shareLink.spaces.description 
+        ? `\n\nOWNER INSTRUCTIONS (you MUST follow these carefully):\n${shareLink.spaces.description}`
+        : '';
+
       console.log('Using vector store:', vectorStoreId);
-      console.log('System prompt includes owner instructions:', !!shareLink.spaces.description);
+      console.log('Owner instructions:', ownerInstructions ? 'Yes' : 'None');
       
-      // Use Chat Completions API with file_search tool
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Use OpenAI Responses API with file_search
+      const response = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
@@ -101,13 +87,24 @@ Be helpful, accurate, and concise.`;
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          messages,
+          input: messages,
+          instructions: `You are "${shareLink.spaces.name}", a helpful AI assistant.
+
+ABOUT YOU:
+- Your name is "${shareLink.spaces.name}"
+- You are an AI assistant that answers questions based on uploaded documents
+
+CRITICAL RULES:
+1. For questions about YOUR NAME or WHAT YOU ARE: Use the information above.
+2. For ALL OTHER questions: Search the documents using file_search and answer based on what you find.
+3. If the file_search finds relevant information, use it to answer and cite the source.
+4. If no relevant information is found in the documents, follow the owner's instructions below.
+5. NEVER make up information that isn't in the documents.
+6. Be helpful, accurate, and concise.${ownerInstructions}`,
           tools: [
             {
               type: 'file_search',
-              file_search: {
-                vector_store_ids: [vectorStoreId],
-              }
+              vector_store_ids: [vectorStoreId],
             }
           ],
           stream: true,
@@ -123,10 +120,10 @@ Be helpful, accurate, and concise.`;
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-        throw new Error(`AI service error: ${errorText}`);
+        throw new Error('AI service error');
       }
 
-      // Stream the response directly
+      // Transform OpenAI Responses API stream to standard format
       const reader = response.body?.getReader();
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
@@ -158,12 +155,21 @@ Be helpful, accurate, and concise.`;
 
               try {
                 const event = JSON.parse(data);
-                // Forward chat completion chunks directly
-                if (event.choices?.[0]?.delta?.content) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                
+                // Handle text delta events from Responses API
+                if (event.type === 'response.output_text.delta' && event.delta) {
+                  const chunk = {
+                    choices: [{
+                      delta: { content: event.delta },
+                      index: 0,
+                    }]
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                } else if (event.type === 'response.completed') {
+                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 }
               } catch (e) {
-                console.error('Failed to parse event:', e);
+                // Skip malformed JSON
               }
             }
           }
