@@ -279,22 +279,17 @@ export default function SpaceDetail() {
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-accent/10">
       {/* Header */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b border-border/50">
-        <div className="container flex items-center justify-between h-16 px-4">
-          <div className="flex items-center gap-3">
+        <div className="container flex items-center justify-between h-14 px-4 gap-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <Link to="/owner/spaces">
               <Button variant="ghost" size="icon" className="shrink-0">
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <div className="min-w-0">
-              <h1 className="text-lg font-display font-bold truncate">{space.name}</h1>
-              {space.description && (
-                <p className="text-sm text-muted-foreground truncate">{space.description}</p>
-              )}
-            </div>
+            <h1 className="text-lg font-display font-bold truncate">{space.name}</h1>
           </div>
           
-          <Link to={`/owner/spaces/${spaceId}/share`}>
+          <Link to={`/owner/spaces/${spaceId}/share`} className="shrink-0">
             <Button variant="outline" size="sm">
               <Share2 className="w-4 h-4 mr-2" />
               Share
