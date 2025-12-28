@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Sparkles, User, AlertCircle, BookOpen } from 'lucide-react';
+import { useVoiceRecording } from '@/hooks/useVoiceRecording';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import { 
+  Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
+  Mic, MicOff, Volume2, VolumeX, Square
+} from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,9 +31,35 @@ export default function PublicChat() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoPlayTTS, setAutoPlayTTS] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  
+  // Voice recording hook
+  const { isRecording, isProcessing, toggleRecording } = useVoiceRecording({
+    onTranscript: (text) => {
+      setInput(prev => prev ? `${prev} ${text}` : text);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Voice Error',
+        description: error,
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  // Text-to-speech hook
+  const { speak, stop, isPlaying, isLoading: ttsLoading } = useTextToSpeech({
+    onError: (error) => {
+      toast({
+        title: 'TTS Error',
+        description: error,
+        variant: 'destructive',
+      });
+    },
+  });
 
   useEffect(() => {
     validateToken();
@@ -142,6 +173,11 @@ export default function PublicChat() {
             }
           }
         }
+      }
+      
+      // Auto-play TTS if enabled and we have content
+      if (autoPlayTTS && assistantContent.trim()) {
+        speak(assistantContent);
       }
     } catch (err) {
       toast({
@@ -265,6 +301,28 @@ export default function PublicChat() {
                           </div>
                         </div>
                       )}
+                      
+                      {/* TTS button for assistant messages */}
+                      {message.role === 'assistant' && message.content && (
+                        <div className="mt-2 pt-2 border-t border-border/20">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => isPlaying ? stop() : speak(message.content)}
+                            disabled={ttsLoading}
+                            className="h-7 px-2 text-xs"
+                          >
+                            {ttsLoading ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : isPlaying ? (
+                              <Square className="w-3 h-3 mr-1" />
+                            ) : (
+                              <Volume2 className="w-3 h-3 mr-1" />
+                            )}
+                            {isPlaying ? 'Stop' : 'Listen'}
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -295,13 +353,48 @@ export default function PublicChat() {
       {/* Input */}
       <footer className="sticky bottom-0 backdrop-blur-md bg-background/80 border-t border-border/50 p-4">
         <div className="container max-w-3xl mx-auto">
+          {/* Auto TTS Toggle */}
+          <div className="flex justify-end mb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAutoPlayTTS(!autoPlayTTS)}
+              className={`h-7 px-2 text-xs ${autoPlayTTS ? 'text-primary' : 'text-muted-foreground'}`}
+            >
+              {autoPlayTTS ? (
+                <Volume2 className="w-3 h-3 mr-1" />
+              ) : (
+                <VolumeX className="w-3 h-3 mr-1" />
+              )}
+              Auto-read answers
+            </Button>
+          </div>
+          
           <div className="flex gap-2">
+            {/* Voice Input Button */}
+            <Button
+              variant={isRecording ? "destructive" : "outline"}
+              size="icon"
+              onClick={toggleRecording}
+              disabled={isProcessing || sending}
+              className={`shrink-0 ${isRecording ? 'animate-pulse' : ''}`}
+              title={isRecording ? 'Stop recording' : 'Start voice input'}
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isRecording ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+            </Button>
+            
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Ask a question..."
-              disabled={sending}
+              placeholder={isRecording ? "Listening..." : "Ask a question..."}
+              disabled={sending || isRecording}
               className="flex-1"
             />
             <Button 
@@ -317,7 +410,7 @@ export default function PublicChat() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
-            Answers are generated based on the documents in this knowledge base
+            {isRecording ? 'Speak now... click mic to stop' : 'Type or speak your question'}
           </p>
         </div>
       </footer>

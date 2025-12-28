@@ -312,6 +312,29 @@ Flow:
 7. Update document status to 'ready'
 ```
 
+### Voice & Audio
+
+#### `voice-to-text`
+Transcribes audio to text using OpenAI Whisper.
+
+```typescript
+POST { audio: base64_string }
+Response: { text: string }
+
+Used by: Owner voice notes, Public chat voice input
+```
+
+#### `text-to-speech`
+Generates audio from text using OpenAI TTS.
+
+```typescript
+POST { text: string, voice?: string }
+Response: audio/mpeg (binary)
+
+Voices: alloy, ash, ballad, coral, echo, sage, shimmer, verse
+Used by: Public chat "Listen" button, Auto-read feature
+```
+
 ---
 
 ## AI Integration
