@@ -58,6 +58,7 @@ export type Database = {
           file_type: string
           filename: string
           id: string
+          openai_file_id: string | null
           space_id: string
           status: Database["public"]["Enums"]["document_status"]
           updated_at: string
@@ -70,6 +71,7 @@ export type Database = {
           file_type: string
           filename: string
           id?: string
+          openai_file_id?: string | null
           space_id: string
           status?: Database["public"]["Enums"]["document_status"]
           updated_at?: string
@@ -82,6 +84,7 @@ export type Database = {
           file_type?: string
           filename?: string
           id?: string
+          openai_file_id?: string | null
           space_id?: string
           status?: Database["public"]["Enums"]["document_status"]
           updated_at?: string
@@ -161,6 +164,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          openai_vector_store_id: string | null
           owner_id: string
           updated_at: string
         }
@@ -169,6 +173,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          openai_vector_store_id?: string | null
           owner_id: string
           updated_at?: string
         }
@@ -177,6 +182,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          openai_vector_store_id?: string | null
           owner_id?: string
           updated_at?: string
         }
