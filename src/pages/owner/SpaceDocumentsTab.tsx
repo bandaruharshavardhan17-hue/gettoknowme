@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, MessageSquarePlus, Send, Bot
+  ClipboardPaste, PenLine
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -51,13 +51,11 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [noteContent, setNoteContent] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   
-  // Chat dialog state
-  const [chatDialogOpen, setChatDialogOpen] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState('');
-  const [generatedTitle, setGeneratedTitle] = useState('');
+  // Quick add dialog state
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [quickAddContent, setQuickAddContent] = useState('');
+  const [savingQuickAdd, setSavingQuickAdd] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -292,54 +290,24 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     }
   };
 
-  const handleChatSubmit = async () => {
-    if (!chatInput.trim() || chatLoading) return;
-
-    const userMessage = chatInput.trim();
-    setChatInput('');
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setChatLoading(true);
-
-    try {
-      const response = await supabase.functions.invoke('generate-content', {
-        body: { 
-          prompt: userMessage,
-          context: chatMessages.map(m => `${m.role}: ${m.content}`).join('\n'),
-        },
-      });
-
-      if (response.error) throw response.error;
-
-      const { content, title } = response.data;
-      setChatMessages(prev => [...prev, { role: 'assistant', content }]);
-      setGeneratedContent(content);
-      setGeneratedTitle(title || 'Generated Content');
-    } catch (error) {
+  const handleQuickAdd = async () => {
+    if (!quickAddTitle.trim() || !quickAddContent.trim()) {
       toast({
         title: 'Error',
-        description: 'Failed to generate content. Please try again.',
+        description: 'Please enter a title and content',
         variant: 'destructive',
       });
-      setChatMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
-      }]);
-    } finally {
-      setChatLoading(false);
+      return;
     }
-  };
 
-  const handleSaveGeneratedContent = async () => {
-    if (!generatedContent.trim()) return;
-
-    setSavingNote(true);
+    setSavingQuickAdd(true);
     try {
       const { data: doc, error } = await supabase
         .from('documents')
         .insert({
           space_id: spaceId,
-          filename: generatedTitle || 'AI Generated Content',
-          content_text: generatedContent.trim(),
+          filename: quickAddTitle.trim(),
+          content_text: quickAddContent.trim(),
           file_type: 'note',
           status: 'ready' as DocumentStatus,
         })
@@ -348,11 +316,11 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
       if (error) throw error;
 
-      // Create chunks
+      // Create chunks for the content
       const chunkSize = 1000;
       const chunks = [];
-      for (let i = 0; i < generatedContent.length; i += chunkSize) {
-        chunks.push(generatedContent.slice(i, i + chunkSize));
+      for (let i = 0; i < quickAddContent.length; i += chunkSize) {
+        chunks.push(quickAddContent.slice(i, i + chunkSize));
       }
 
       for (let i = 0; i < chunks.length; i++) {
@@ -364,23 +332,22 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
       }
 
       setDocuments(prev => [doc, ...prev]);
-      setChatDialogOpen(false);
-      setChatMessages([]);
-      setGeneratedContent('');
-      setGeneratedTitle('');
+      setQuickAddTitle('');
+      setQuickAddContent('');
+      setQuickAddOpen(false);
 
       toast({
-        title: 'Content saved',
+        title: 'Info added',
         description: `"${doc.filename}" has been added to your knowledge base`,
       });
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to save content',
+        description: 'Failed to save info',
         variant: 'destructive',
       });
     } finally {
-      setSavingNote(false);
+      setSavingQuickAdd(false);
     }
   };
 
@@ -459,10 +426,10 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
         
         <Button 
           variant="outline"
-          onClick={() => setChatDialogOpen(true)}
+          onClick={() => setQuickAddOpen(true)}
         >
-          <MessageSquarePlus className="w-4 h-4 mr-2" />
-          Add via Chat
+          <PenLine className="w-4 h-4 mr-2" />
+          Quick Add Info
         </Button>
       </div>
 
@@ -516,98 +483,52 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
         </DialogContent>
       </Dialog>
 
-      {/* Chat Dialog */}
-      <Dialog open={chatDialogOpen} onOpenChange={(open) => {
-        setChatDialogOpen(open);
-        if (!open) {
-          setChatMessages([]);
-          setGeneratedContent('');
-          setGeneratedTitle('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh]">
+      {/* Quick Add Dialog */}
+      <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
-              <Bot className="w-5 h-5" />
-              Generate Content with AI
+              <PenLine className="w-5 h-5" />
+              Quick Add Info
             </DialogTitle>
             <DialogDescription>
-              Chat with AI to generate content for your knowledge base
+              Type or paste information to add to your knowledge base
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="flex flex-col h-[400px]">
-            <ScrollArea className="flex-1 pr-4 mb-4">
-              <div className="space-y-4">
-                {chatMessages.length === 0 && (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Bot className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>Start a conversation to generate content</p>
-                    <p className="text-sm mt-1">Try: "Write a FAQ about product returns"</p>
-                  </div>
-                )}
-                {chatMessages.map((msg, i) => (
-                  <div 
-                    key={i} 
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] rounded-lg p-3 ${
-                        msg.role === 'user' 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted rounded-lg p-3">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-            
-            <div className="flex gap-2">
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="quick-title">Title</Label>
               <Input
-                placeholder="Describe the content you want to generate..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleChatSubmit()}
-                disabled={chatLoading}
+                id="quick-title"
+                placeholder="e.g., Contact Info, About Us"
+                value={quickAddTitle}
+                onChange={(e) => setQuickAddTitle(e.target.value)}
               />
-              <Button onClick={handleChatSubmit} disabled={chatLoading || !chatInput.trim()}>
-                <Send className="w-4 h-4" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-content">Information</Label>
+              <Textarea
+                id="quick-content"
+                placeholder="Type your information here..."
+                value={quickAddContent}
+                onChange={(e) => setQuickAddContent(e.target.value)}
+                rows={8}
+                className="resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setQuickAddOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleQuickAdd} 
+                disabled={savingQuickAdd || !quickAddTitle.trim() || !quickAddContent.trim()}
+                className="gradient-primary text-primary-foreground"
+              >
+                {savingQuickAdd && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Add Info
               </Button>
             </div>
-            
-            {generatedContent && (
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Input
-                      value={generatedTitle}
-                      onChange={(e) => setGeneratedTitle(e.target.value)}
-                      placeholder="Content title"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <Button 
-                    onClick={handleSaveGeneratedContent}
-                    disabled={savingNote}
-                    size="sm"
-                    className="gradient-primary text-primary-foreground"
-                  >
-                    {savingNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    Save to Knowledge Base
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
