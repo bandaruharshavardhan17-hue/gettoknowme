@@ -4,10 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, FileText, Link2, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Link2, BarChart3, MessageSquare } from 'lucide-react';
 import SpaceDocumentsTab from './SpaceDocumentsTab';
 import SpaceLinksTab from './SpaceLinksTab';
 import SpaceAnalyticsTab from './SpaceAnalyticsTab';
+import SpaceChatHistoryTab from './SpaceChatHistoryTab';
 
 interface Space {
   id: string;
@@ -80,7 +81,7 @@ export default function SpaceDetail() {
 
       <main className="container px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="documents" className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Documents</span>
@@ -89,6 +90,11 @@ export default function SpaceDetail() {
             <TabsTrigger value="links" className="flex items-center gap-2">
               <Link2 className="w-4 h-4" />
               <span>Links</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
+              <span className="sm:hidden">Chat</span>
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
@@ -102,6 +108,10 @@ export default function SpaceDetail() {
           
           <TabsContent value="links">
             <SpaceLinksTab spaceId={spaceId!} />
+          </TabsContent>
+
+          <TabsContent value="history">
+            <SpaceChatHistoryTab spaceId={spaceId!} />
           </TabsContent>
           
           <TabsContent value="analytics">
