@@ -73,20 +73,88 @@ serve(async (req) => {
         });
       }
 
-      // Build messages for OpenAI
-      const messages = [
-        ...(history || []).map((m: any) => ({ role: m.role, content: m.content })),
-        { role: 'user', content: message }
-      ];
-
       const defaultFallback = "I don't have that information in the provided documents.";
-      const fallbackMessage = shareLink.spaces.description || defaultFallback;
+      const ownerInstructions = shareLink.spaces.description || defaultFallback;
 
       console.log('Using vector store:', vectorStoreId);
       console.log('Owner instructions:', shareLink.spaces.description ? 'Yes' : 'None');
-      
-      // Use OpenAI Responses API with file_search
-      const response = await fetch('https://api.openai.com/v1/responses', {
+
+      // First, search the vector store for relevant content
+      const searchQuery = message;
+      console.log('Searching for:', searchQuery);
+
+      // Use OpenAI's vector store search
+      const searchResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/search`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          max_num_results: 5,
+        }),
+      });
+
+      let context = '';
+      let citations: string[] = [];
+
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        console.log('Search results:', JSON.stringify(searchData).slice(0, 500));
+        
+        if (searchData.data && searchData.data.length > 0) {
+          // Extract content from search results
+          for (const result of searchData.data) {
+            if (result.content && Array.isArray(result.content)) {
+              for (const content of result.content) {
+                if (content.type === 'text' && content.text) {
+                  context += content.text + '\n\n';
+                  // Add first 100 chars as citation
+                  if (content.text.length > 20) {
+                    citations.push(content.text.slice(0, 150) + '...');
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        const errorText = await searchResponse.text();
+        console.error('Vector store search error:', searchResponse.status, errorText);
+      }
+
+      console.log('Found context length:', context.length);
+      console.log('Citations count:', citations.length);
+
+      // Build the system prompt with context
+      const systemPrompt = context.length > 0 
+        ? `You are a helpful AI assistant. Answer the user's question based ONLY on the following information from the documents:
+
+---DOCUMENT CONTENT---
+${context}
+---END DOCUMENT CONTENT---
+
+RULES:
+1. Answer based ONLY on the document content above.
+2. If the user asks about your name, education, experience, skills, or any personal info - look for it in the document content.
+3. Be conversational and answer as if YOU are the person described in the documents.
+4. If the specific information is not in the documents, say: "${ownerInstructions}"
+5. Never make up information.`
+        : `You are a helpful AI assistant. The user asked a question but no relevant information was found in the documents.
+
+Your response should be: "${ownerInstructions}"`;
+
+      // Build messages for chat
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).slice(-6).map((m: any) => ({ role: m.role, content: m.content })),
+        { role: 'user', content: message }
+      ];
+
+      // Use standard Chat Completions API
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
@@ -94,26 +162,9 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          input: messages,
-          instructions: `You are a helpful AI assistant for "${shareLink.spaces.name}". Your job is to answer questions ONLY based on the uploaded documents.
-
-CRITICAL RULES:
-1. ALWAYS use file_search to look up information in the documents before answering ANY question.
-2. For questions like "What is your name?", "Who are you?", "Tell me about yourself" - search the documents for personal information (like a resume or bio) and answer based on what you find.
-3. If the file_search finds relevant information, use it to answer accurately.
-4. If NO relevant information is found in the documents, respond with: "${fallbackMessage}"
-5. NEVER make up information that isn't in the documents.
-6. NEVER say you are an AI or that you don't have friends - instead search the documents and answer based on what's there.
-7. Be helpful, accurate, and conversational.
-
-Remember: You represent the information in the documents. If someone asks personal questions, look for that info in the uploaded files (resume, bio, etc.) and answer as if you ARE that person.`,
-          tools: [
-            {
-              type: 'file_search',
-              vector_store_ids: [vectorStoreId],
-            }
-          ],
+          messages: messages,
           stream: true,
+          max_tokens: 1000,
         }),
       });
 
@@ -129,7 +180,7 @@ Remember: You represent the information in the documents. If someone asks person
         throw new Error('AI service error');
       }
 
-      // Transform OpenAI Responses API stream to standard format
+      // Stream the response
       const reader = response.body?.getReader();
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
@@ -142,6 +193,7 @@ Remember: You represent the information in the documents. If someone asks person
           }
 
           let buffer = '';
+          let sentCitations = false;
           
           while (true) {
             const { done, value } = await reader.read();
@@ -155,24 +207,23 @@ Remember: You represent the information in the documents. If someone asks person
               if (!line.startsWith('data: ')) continue;
               const data = line.slice(6).trim();
               if (data === '[DONE]') {
+                // Send citations at the end if we have them
+                if (citations.length > 0 && !sentCitations) {
+                  const citationChunk = {
+                    citations: citations.slice(0, 3),
+                    choices: [{ delta: { content: '' }, index: 0 }]
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(citationChunk)}\n\n`));
+                  sentCitations = true;
+                }
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 continue;
               }
 
               try {
-                const event = JSON.parse(data);
-                
-                // Handle text delta events from Responses API
-                if (event.type === 'response.output_text.delta' && event.delta) {
-                  const chunk = {
-                    choices: [{
-                      delta: { content: event.delta },
-                      index: 0,
-                    }]
-                  };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-                } else if (event.type === 'response.completed') {
-                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                const parsed = JSON.parse(data);
+                if (parsed.choices?.[0]?.delta?.content) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`));
                 }
               } catch (e) {
                 // Skip malformed JSON
