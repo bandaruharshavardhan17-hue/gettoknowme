@@ -21,19 +21,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { User, Settings, LogOut, Loader2, Upload, Camera } from 'lucide-react';
+import { Settings, LogOut, Loader2, Camera } from 'lucide-react';
 
-interface Profile {
+interface ProfileData {
   id: string;
   display_name: string | null;
   email: string | null;
-  avatar_url?: string | null;
+  avatar_url: string | null;
 }
 
 export function ProfileDropdown() {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);

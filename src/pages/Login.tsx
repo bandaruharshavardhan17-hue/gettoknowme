@@ -6,21 +6,34 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Sparkles, Mail, Lock, Eye, EyeOff, User } from 'lucide-react';
 import { z } from 'zod';
 
-const authSchema = z.object({
+const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+const signupSchema = z.object({
+  displayName: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Please enter a valid email'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ displayName?: string; email?: string; password?: string; confirmPassword?: string }>({});
   
   const { signIn, signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -54,15 +67,28 @@ export default function Login() {
   }
 
   const validateForm = () => {
-    const result = authSchema.safeParse({ email, password });
-    if (!result.success) {
-      const fieldErrors: { email?: string; password?: string } = {};
-      result.error.errors.forEach((err) => {
-        if (err.path[0] === 'email') fieldErrors.email = err.message;
-        if (err.path[0] === 'password') fieldErrors.password = err.message;
-      });
-      setErrors(fieldErrors);
-      return false;
+    if (isLogin) {
+      const result = loginSchema.safeParse({ email, password });
+      if (!result.success) {
+        const fieldErrors: typeof errors = {};
+        result.error.errors.forEach((err) => {
+          const field = err.path[0] as keyof typeof errors;
+          fieldErrors[field] = err.message;
+        });
+        setErrors(fieldErrors);
+        return false;
+      }
+    } else {
+      const result = signupSchema.safeParse({ displayName, email, password, confirmPassword });
+      if (!result.success) {
+        const fieldErrors: typeof errors = {};
+        result.error.errors.forEach((err) => {
+          const field = err.path[0] as keyof typeof errors;
+          fieldErrors[field] = err.message;
+        });
+        setErrors(fieldErrors);
+        return false;
+      }
     }
     setErrors({});
     return true;
@@ -76,31 +102,43 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const { error } = isLogin 
-        ? await signIn(email, password)
-        : await signUp(email, password);
-
-      if (error) {
-        let message = error.message;
-        if (message.includes('User already registered')) {
-          message = 'This email is already registered. Try logging in instead.';
-        } else if (message.includes('Invalid login credentials')) {
-          message = 'Invalid email or password. Please try again.';
+      if (isLogin) {
+        const { error } = await signIn(email, password);
+        if (error) {
+          let message = error.message;
+          if (message.includes('Invalid login credentials')) {
+            message = 'Invalid email or password. Please try again.';
+          }
+          toast({
+            title: 'Error',
+            description: message,
+            variant: 'destructive',
+          });
+        } else {
+          const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/owner/spaces';
+          navigate(from, { replace: true });
         }
-        toast({
-          title: 'Error',
-          description: message,
-          variant: 'destructive',
-        });
-      } else if (!isLogin) {
-        toast({
-          title: 'Account created!',
-          description: 'You can now log in with your credentials.',
-        });
-        setIsLogin(true);
       } else {
-        const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/owner/spaces';
-        navigate(from, { replace: true });
+        const { error } = await signUp(email, password, displayName);
+        if (error) {
+          let message = error.message;
+          if (message.includes('User already registered') || message.includes('already been registered')) {
+            message = 'This email is already registered. Try logging in instead.';
+          }
+          toast({
+            title: 'Error',
+            description: message,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Account created!',
+            description: 'You can now log in with your credentials.',
+          });
+          setIsLogin(true);
+          setConfirmPassword('');
+          setDisplayName('');
+        }
       }
     } catch (err) {
       toast({
@@ -111,6 +149,13 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchMode = () => {
+    setIsLogin(!isLogin);
+    setErrors({});
+    setConfirmPassword('');
+    setDisplayName('');
   };
 
   return (
@@ -138,6 +183,30 @@ export default function Login() {
         
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Display Name - only for signup */}
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="displayName" className="text-sm font-medium">
+                  Your Name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="displayName"
+                    type="text"
+                    placeholder="John Doe"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="pl-10"
+                    disabled={loading}
+                  />
+                </div>
+                {errors.displayName && (
+                  <p className="text-sm text-destructive">{errors.displayName}</p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email
@@ -187,6 +256,37 @@ export default function Login() {
               )}
             </div>
 
+            {/* Confirm Password - only for signup */}
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                  Confirm Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 pr-10"
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {errors.confirmPassword && (
+                  <p className="text-sm text-destructive">{errors.confirmPassword}</p>
+                )}
+              </div>
+            )}
+
             <Button 
               type="submit" 
               className="w-full gradient-primary text-primary-foreground font-semibold h-11 shadow-lg hover:opacity-90 transition-opacity"
@@ -202,10 +302,7 @@ export default function Login() {
           <div className="mt-6 text-center">
             <button
               type="button"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setErrors({});
-              }}
+              onClick={switchMode}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               disabled={loading}
             >
