@@ -17,6 +17,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: {
         autoRefreshToken: false,
@@ -24,10 +30,10 @@ serve(async (req) => {
       }
     });
 
-    // Get document
+    // Get document with space info
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('*, spaces(id)')
+      .select('*, spaces(id, name, openai_vector_store_id)')
       .eq('id', documentId)
       .single();
 
@@ -35,10 +41,51 @@ serve(async (req) => {
       throw new Error('Document not found');
     }
 
-    let textContent = doc.content_text || '';
+    const space = doc.spaces;
+    let vectorStoreId = space.openai_vector_store_id;
 
-    // If file upload, download and extract text
-    if (doc.file_path && doc.file_type !== 'note') {
+    // Create vector store for space if it doesn't exist
+    if (!vectorStoreId) {
+      console.log('Creating vector store for space:', space.name);
+      const vsResponse = await fetch('https://api.openai.com/v1/vector_stores', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2'
+        },
+        body: JSON.stringify({
+          name: `knowme-space-${space.id}`,
+        }),
+      });
+
+      if (!vsResponse.ok) {
+        const error = await vsResponse.text();
+        console.error('Failed to create vector store:', error);
+        throw new Error('Failed to create vector store');
+      }
+
+      const vsData = await vsResponse.json();
+      vectorStoreId = vsData.id;
+      console.log('Created vector store:', vectorStoreId);
+
+      // Save vector store ID to space
+      await supabase
+        .from('spaces')
+        .update({ openai_vector_store_id: vectorStoreId })
+        .eq('id', space.id);
+    }
+
+    let fileContent: Blob;
+    let filename = doc.filename;
+
+    // Get file content
+    if (doc.file_type === 'note') {
+      // For notes, create a text file from content
+      fileContent = new Blob([doc.content_text || ''], { type: 'text/plain' });
+      filename = `${doc.filename}.txt`;
+    } else if (doc.file_path) {
+      // Download file from storage
       const { data: fileData, error: fileError } = await supabase.storage
         .from('documents')
         .download(doc.file_path);
@@ -51,40 +98,69 @@ serve(async (req) => {
         throw fileError;
       }
 
-      textContent = await fileData.text();
+      fileContent = fileData;
+    } else {
+      throw new Error('No file content available');
     }
 
-    // Sanitize text: remove null characters that PostgreSQL can't store
-    textContent = textContent.replace(/\x00/g, '');
+    // Upload file to OpenAI
+    console.log('Uploading file to OpenAI:', filename);
+    const formData = new FormData();
+    formData.append('file', fileContent, filename);
+    formData.append('purpose', 'assistants');
 
-    if (!textContent.trim()) {
+    const uploadResponse = await fetch('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const error = await uploadResponse.text();
+      console.error('Failed to upload file to OpenAI:', error);
       await supabase.from('documents').update({ 
         status: 'failed', 
-        error_message: 'No text content found' 
+        error_message: 'Failed to upload to OpenAI' 
       }).eq('id', documentId);
-      return new Response(JSON.stringify({ error: 'No content' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      throw new Error('Failed to upload file to OpenAI');
     }
 
-    // Chunk the text (simple chunking by paragraphs/sentences)
-    const chunks = chunkText(textContent, 500);
-    console.log(`Created ${chunks.length} chunks`);
+    const uploadData = await uploadResponse.json();
+    const openaiFileId = uploadData.id;
+    console.log('Uploaded file to OpenAI:', openaiFileId);
 
-    // Insert chunks (without embeddings for now - simplified version)
-    for (let i = 0; i < chunks.length; i++) {
-      await supabase.from('document_chunks').insert({
-        document_id: documentId,
-        chunk_index: i,
-        content: chunks[i],
-      });
+    // Add file to vector store
+    console.log('Adding file to vector store:', vectorStoreId);
+    const addFileResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/files`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2'
+      },
+      body: JSON.stringify({
+        file_id: openaiFileId,
+      }),
+    });
+
+    if (!addFileResponse.ok) {
+      const error = await addFileResponse.text();
+      console.error('Failed to add file to vector store:', error);
+      await supabase.from('documents').update({ 
+        status: 'failed', 
+        error_message: 'Failed to index file' 
+      }).eq('id', documentId);
+      throw new Error('Failed to add file to vector store');
     }
+
+    console.log('File added to vector store successfully');
 
     // Update document status
     const { error: updateError } = await supabase.from('documents').update({ 
       status: 'ready',
-      content_text: textContent.substring(0, 10000) // Store first 10k chars
+      openai_file_id: openaiFileId,
     }).eq('id', documentId);
 
     if (updateError) {
@@ -93,7 +169,7 @@ serve(async (req) => {
       console.log('Document processed successfully');
     }
 
-    return new Response(JSON.stringify({ success: true, chunks: chunks.length }), {
+    return new Response(JSON.stringify({ success: true, openaiFileId }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
@@ -106,23 +182,3 @@ serve(async (req) => {
     });
   }
 });
-
-function chunkText(text: string, maxChunkSize: number): string[] {
-  const chunks: string[] = [];
-  const paragraphs = text.split(/\n\n+/);
-  let currentChunk = '';
-
-  for (const para of paragraphs) {
-    if (currentChunk.length + para.length > maxChunkSize && currentChunk) {
-      chunks.push(currentChunk.trim());
-      currentChunk = '';
-    }
-    currentChunk += para + '\n\n';
-  }
-
-  if (currentChunk.trim()) {
-    chunks.push(currentChunk.trim());
-  }
-
-  return chunks.length > 0 ? chunks : [text.substring(0, maxChunkSize)];
-}
