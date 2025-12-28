@@ -103,7 +103,16 @@ serve(async (req) => {
       if (isImage) {
         console.log('Extracting text from image using Vision API');
         const arrayBuffer = await fileData.arrayBuffer();
-        const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        // Convert to base64 in chunks to avoid stack overflow
+        let binaryString = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+          const chunk = uint8Array.slice(i, i + chunkSize);
+          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        const base64Image = btoa(binaryString);
         const mimeType = doc.filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
         const visionResponse = await fetch('https://api.openai.com/v1/chat/completions', {

@@ -9,8 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, PenLine, Link, Copy, ExternalLink
+  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff
 } from 'lucide-react';
+import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Dialog,
@@ -63,9 +64,28 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [creatingLink, setCreatingLink] = useState(false);
   const [newLinkToken, setNewLinkToken] = useState<string | null>(null);
   
+  // Voice recording dialog state
+  const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
+  const [voiceNoteTitle, setVoiceNoteTitle] = useState('');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [savingVoiceNote, setSavingVoiceNote] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  const { isRecording, isProcessing, toggleRecording } = useVoiceRecording({
+    onTranscript: (text) => {
+      setVoiceTranscript(prev => prev ? `${prev} ${text}` : text);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Voice Error',
+        description: error,
+        variant: 'destructive',
+      });
+    },
+  });
 
   useEffect(() => {
     fetchDocuments();
@@ -507,6 +527,14 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
             <PenLine className="w-4 h-4 mr-2" />
             Quick Add Info
           </Button>
+          
+          <Button 
+            variant="outline"
+            onClick={() => setVoiceDialogOpen(true)}
+          >
+            <Mic className="w-4 h-4 mr-2" />
+            Voice Note
+          </Button>
         </div>
 
         {/* Create Chat Link Button */}
@@ -641,6 +669,143 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               >
                 {savingQuickAdd && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Add Info
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Voice Note Dialog */}
+      <Dialog open={voiceDialogOpen} onOpenChange={(open) => {
+        setVoiceDialogOpen(open);
+        if (!open) {
+          setVoiceNoteTitle('');
+          setVoiceTranscript('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Mic className="w-5 h-5" />
+              Voice Note
+            </DialogTitle>
+            <DialogDescription>
+              Record your voice and we'll transcribe it to text
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="voice-title">Title</Label>
+              <Input
+                id="voice-title"
+                placeholder="e.g., Meeting Notes, Ideas"
+                value={voiceNoteTitle}
+                onChange={(e) => setVoiceNoteTitle(e.target.value)}
+              />
+            </div>
+            
+            {/* Recording Controls */}
+            <div className="flex flex-col items-center gap-4 py-6">
+              <button
+                onClick={toggleRecording}
+                disabled={isProcessing}
+                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+                  isRecording 
+                    ? 'bg-destructive text-destructive-foreground animate-pulse' 
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isProcessing ? (
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="w-8 h-8" />
+                ) : (
+                  <Mic className="w-8 h-8" />
+                )}
+              </button>
+              <p className="text-sm text-muted-foreground">
+                {isProcessing ? 'Transcribing...' : isRecording ? 'Recording... Click to stop' : 'Click to start recording'}
+              </p>
+            </div>
+            
+            {/* Transcript */}
+            <div className="space-y-2">
+              <Label htmlFor="voice-transcript">Transcript</Label>
+              <Textarea
+                id="voice-transcript"
+                placeholder="Your transcribed text will appear here..."
+                value={voiceTranscript}
+                onChange={(e) => setVoiceTranscript(e.target.value)}
+                rows={6}
+                className="resize-none"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setVoiceDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={async () => {
+                  if (!voiceNoteTitle.trim() || !voiceTranscript.trim()) {
+                    toast({
+                      title: 'Error',
+                      description: 'Please add a title and record some audio',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  
+                  setSavingVoiceNote(true);
+                  try {
+                    const { data: doc, error } = await supabase
+                      .from('documents')
+                      .insert({
+                        space_id: spaceId,
+                        filename: voiceNoteTitle.trim(),
+                        content_text: voiceTranscript.trim(),
+                        file_type: 'note',
+                        status: 'ready' as DocumentStatus,
+                      })
+                      .select()
+                      .single();
+
+                    if (error) throw error;
+
+                    // Create chunks
+                    const chunkSize = 1000;
+                    for (let i = 0; i < voiceTranscript.length; i += chunkSize) {
+                      await supabase.from('document_chunks').insert({
+                        document_id: doc.id,
+                        content: voiceTranscript.slice(i, i + chunkSize),
+                        chunk_index: Math.floor(i / chunkSize),
+                      });
+                    }
+
+                    setDocuments(prev => [doc, ...prev]);
+                    setVoiceNoteTitle('');
+                    setVoiceTranscript('');
+                    setVoiceDialogOpen(false);
+
+                    toast({
+                      title: 'Voice note added',
+                      description: `"${doc.filename}" has been added to your knowledge base`,
+                    });
+                  } catch (error) {
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to save voice note',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                    setSavingVoiceNote(false);
+                  }
+                }} 
+                disabled={savingVoiceNote || !voiceNoteTitle.trim() || !voiceTranscript.trim()}
+                className="gradient-primary text-primary-foreground"
+              >
+                {savingVoiceNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Save Voice Note
               </Button>
             </div>
           </div>
