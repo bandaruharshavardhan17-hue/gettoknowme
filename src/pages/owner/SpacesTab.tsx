@@ -9,7 +9,18 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, FolderOpen, Loader2, FileText, Share2 } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, FileText, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface Space {
   id: string;
@@ -102,6 +113,37 @@ export default function SpacesTab() {
       });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteSpace = async (e: React.MouseEvent, space: Space) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      // Delete all related data first
+      await supabase.from('share_links').delete().eq('space_id', space.id);
+      await supabase.from('document_chunks').delete().in(
+        'document_id',
+        (await supabase.from('documents').select('id').eq('space_id', space.id)).data?.map(d => d.id) || []
+      );
+      await supabase.from('documents').delete().eq('space_id', space.id);
+      
+      const { error } = await supabase.from('spaces').delete().eq('id', space.id);
+      if (error) throw error;
+
+      setSpaces(spaces.filter(s => s.id !== space.id));
+      
+      toast({
+        title: 'Space deleted',
+        description: `"${space.name}" has been removed`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete space',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -201,7 +243,35 @@ export default function SpacesTab() {
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center group-hover:scale-105 transition-transform">
                       <FolderOpen className="w-6 h-6 text-primary" />
                     </div>
-                    <Share2 className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete "{space.name}"?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete this space and all its documents, links, and analytics. This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={(e) => handleDeleteSpace(e, space)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                   <CardTitle className="text-lg font-display mt-3 group-hover:text-primary transition-colors">
                     {space.name}

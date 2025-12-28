@@ -7,8 +7,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Link2, Copy, Loader2, CheckCircle, 
-  ExternalLink, LinkIcon, Folder
+  ExternalLink, LinkIcon, Folder, Trash2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface ShareLinkWithSpace {
   id: string;
@@ -65,6 +76,30 @@ export default function ActiveLinksTab() {
       title: 'Copied!',
       description: 'Link copied to clipboard',
     });
+  };
+
+  const handleDeleteLink = async (link: ShareLinkWithSpace) => {
+    try {
+      const { error } = await supabase
+        .from('share_links')
+        .delete()
+        .eq('id', link.id);
+
+      if (error) throw error;
+
+      setLinks(links.filter(l => l.id !== link.id));
+      
+      toast({
+        title: 'Link deleted',
+        description: 'Share link has been removed',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete link',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (loading) {
@@ -156,6 +191,30 @@ export default function ActiveLinksTab() {
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </a>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete this link?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete this share link. Anyone with this link will no longer be able to access the chat.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={() => handleDeleteLink(link)}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </div>
