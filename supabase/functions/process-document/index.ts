@@ -78,6 +78,7 @@ serve(async (req) => {
 
     let fileContent: Blob;
     let filename = doc.filename;
+    const isImage = doc.file_type === 'image';
 
     // Get file content
     if (doc.file_type === 'note') {
@@ -98,7 +99,67 @@ serve(async (req) => {
         throw fileError;
       }
 
-      fileContent = fileData;
+      // For images, extract text using GPT-4 Vision
+      if (isImage) {
+        console.log('Extracting text from image using Vision API');
+        const arrayBuffer = await fileData.arrayBuffer();
+        const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const mimeType = doc.filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+        const visionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Extract ALL text content from this image. Include everything visible: titles, paragraphs, labels, captions, handwritten notes, etc. If there is no text, describe the image content in detail. Return only the extracted/described content, no explanations.',
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${mimeType};base64,${base64Image}`,
+                    },
+                  },
+                ],
+              },
+            ],
+            max_tokens: 4096,
+          }),
+        });
+
+        if (!visionResponse.ok) {
+          const error = await visionResponse.text();
+          console.error('Vision API failed:', error);
+          await supabase.from('documents').update({ 
+            status: 'failed', 
+            error_message: 'Failed to extract text from image' 
+          }).eq('id', documentId);
+          throw new Error('Failed to extract text from image');
+        }
+
+        const visionData = await visionResponse.json();
+        const extractedText = visionData.choices?.[0]?.message?.content || 'No text found in image';
+        console.log('Extracted text from image:', extractedText.substring(0, 200) + '...');
+
+        // Save extracted text to document
+        await supabase.from('documents').update({ 
+          content_text: extractedText 
+        }).eq('id', documentId);
+
+        // Create a text file for OpenAI indexing
+        fileContent = new Blob([`[Image: ${doc.filename}]\n\n${extractedText}`], { type: 'text/plain' });
+        filename = `${doc.filename.split('.')[0]}.txt`;
+      } else {
+        fileContent = fileData;
+      }
     } else {
       throw new Error('No file content available');
     }

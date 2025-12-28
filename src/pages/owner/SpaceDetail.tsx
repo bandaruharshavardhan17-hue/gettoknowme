@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Upload, FileText, StickyNote, Loader2, Trash2, 
-  CheckCircle, XCircle, Clock, Share2, Sparkles, File
+  CheckCircle, XCircle, Clock, Share2, Sparkles, File, Image
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -100,6 +100,14 @@ export default function SpaceDetail() {
     }
   };
 
+  const getFileType = (filename: string): string => {
+    const ext = filename.toLowerCase().split('.').pop() || '';
+    if (ext === 'pdf') return 'pdf';
+    if (ext === 'txt') return 'txt';
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return 'image';
+    return 'txt';
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -107,7 +115,7 @@ export default function SpaceDetail() {
     setUploading(true);
     
     for (const file of Array.from(files)) {
-      const fileType = file.name.endsWith('.pdf') ? 'pdf' : 'txt';
+      const fileType = getFileType(file.name);
       const filePath = `${user?.id}/${spaceId}/${Date.now()}-${file.name}`;
 
       try {
@@ -272,6 +280,7 @@ export default function SpaceDetail() {
   const getFileIcon = (fileType: string) => {
     if (fileType === 'note') return <StickyNote className="w-5 h-5" />;
     if (fileType === 'pdf') return <FileText className="w-5 h-5" />;
+    if (fileType === 'image') return <Image className="w-5 h-5" />;
     return <File className="w-5 h-5" />;
   };
 
@@ -325,7 +334,7 @@ export default function SpaceDetail() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt"
+            accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
             multiple
             className="hidden"
             onChange={handleFileUpload}
@@ -340,7 +349,7 @@ export default function SpaceDetail() {
             ) : (
               <Upload className="w-4 h-4 mr-2" />
             )}
-            Upload PDF/TXT
+            Upload Files
           </Button>
           
           <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
@@ -399,7 +408,7 @@ export default function SpaceDetail() {
               </div>
               <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
               <p className="text-muted-foreground text-center max-w-sm mb-6">
-                Upload PDFs, TXT files, or add notes to build your knowledge base
+                Upload PDFs, images, TXT files, or add notes to build your knowledge base
               </p>
             </CardContent>
           </Card>
@@ -415,6 +424,8 @@ export default function SpaceDetail() {
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                     doc.file_type === 'note' 
                       ? 'bg-warning/20 text-warning' 
+                      : doc.file_type === 'image'
+                      ? 'bg-accent/20 text-accent-foreground'
                       : 'bg-primary/20 text-primary'
                   }`}>
                     {getFileIcon(doc.file_type)}
