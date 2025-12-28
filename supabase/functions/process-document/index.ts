@@ -17,7 +17,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
 
     // Get document
     const { data: doc, error: docError } = await supabase
@@ -74,12 +79,16 @@ serve(async (req) => {
     }
 
     // Update document status
-    await supabase.from('documents').update({ 
+    const { error: updateError } = await supabase.from('documents').update({ 
       status: 'ready',
       content_text: textContent.substring(0, 10000) // Store first 10k chars
     }).eq('id', documentId);
 
-    console.log('Document processed successfully');
+    if (updateError) {
+      console.error('Failed to update document status:', updateError);
+    } else {
+      console.log('Document processed successfully');
+    }
 
     return new Response(JSON.stringify({ success: true, chunks: chunks.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
