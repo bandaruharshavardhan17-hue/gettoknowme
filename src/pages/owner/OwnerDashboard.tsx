@@ -1,31 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { ImpersonationBanner } from '@/components/ImpersonationBanner';
+import { ProfileDropdown } from '@/components/ProfileDropdown';
+import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Sparkles, FolderOpen, Link2, BarChart3, Shield } from 'lucide-react';
+import { Sparkles, FolderOpen, Link2, BarChart3, Shield, HelpCircle } from 'lucide-react';
 import SpacesTab from './SpacesTab';
 import ActiveLinksTab from './ActiveLinksTab';
 import Analytics from './Analytics';
 
+const TUTORIAL_COMPLETED_KEY = 'knowme_tutorial_completed';
+
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState('spaces');
-  const { signOut } = useAuth();
+  const [showTutorial, setShowTutorial] = useState(false);
   const { isAdmin } = useIsAdmin();
   const { isImpersonating } = useImpersonation();
   const navigate = useNavigate();
 
-  const handleSignOut = async () => {
-    await signOut();
+  // Check if this is a first-time user
+  useEffect(() => {
+    const tutorialCompleted = localStorage.getItem(TUTORIAL_COMPLETED_KEY);
+    if (!tutorialCompleted) {
+      setShowTutorial(true);
+    }
+  }, []);
+
+  const handleTutorialComplete = () => {
+    localStorage.setItem(TUTORIAL_COMPLETED_KEY, 'true');
+    setShowTutorial(false);
+  };
+
+  const handleTutorialClose = () => {
+    setShowTutorial(false);
+  };
+
+  const handleShowTutorial = () => {
+    setShowTutorial(true);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-accent/10">
       <ImpersonationBanner />
+      <OnboardingTutorial 
+        open={showTutorial} 
+        onClose={handleTutorialClose} 
+        onComplete={handleTutorialComplete} 
+      />
       {/* Header */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b border-border/50">
         <div className="container flex items-center justify-between h-14 px-4">
@@ -37,6 +62,15 @@ export default function OwnerDashboard() {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleShowTutorial}
+              className="text-muted-foreground"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline ml-2">Help</span>
+            </Button>
             {isAdmin && !isImpersonating && (
               <Button 
                 variant="outline" 
@@ -48,10 +82,7 @@ export default function OwnerDashboard() {
                 Admin
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
+            <ProfileDropdown />
           </div>
         </div>
       </header>
