@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Link2, Copy, Trash2, Loader2, Plus, 
-  CheckCircle, XCircle, ExternalLink, Share2 
+  CheckCircle, XCircle, ExternalLink, Share2, QrCode 
 } from 'lucide-react';
+import { QRCodeDialog } from '@/components/QRCodeDialog';
 
 interface ShareLink {
   id: string;
@@ -34,6 +35,8 @@ export default function ShareSpace() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newLinkName, setNewLinkName] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrLink, setQrLink] = useState<ShareLink | null>(null);
   
   const { toast } = useToast();
 
@@ -316,6 +319,18 @@ export default function ShareSpace() {
                             <Copy className="w-4 h-4" />
                           )}
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            setQrLink(link);
+                            setQrDialogOpen(true);
+                          }}
+                          className="shrink-0"
+                          title="Show QR Code"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </Button>
                         {!link.revoked && (
                           <a
                             href={`/s/${link.token}`}
@@ -357,6 +372,16 @@ export default function ShareSpace() {
               </Card>
             ))}
           </div>
+        )}
+
+        {/* QR Code Dialog */}
+        {qrLink && (
+          <QRCodeDialog
+            open={qrDialogOpen}
+            onOpenChange={setQrDialogOpen}
+            url={`${window.location.origin}/s/${qrLink.token}`}
+            title={qrLink.name ? `QR: ${qrLink.name}` : 'Share QR Code'}
+          />
         )}
       </main>
     </div>
