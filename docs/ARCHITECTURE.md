@@ -1152,19 +1152,26 @@ POST   ?action=assign_role  → Assign admin role
 ### Background Processing
 
 #### `process-document`
-Processes uploaded files for AI indexing.
+Processes uploaded files for AI indexing and text extraction.
 
 ```typescript
 POST { documentId }
 
 Flow:
 1. Get document from DB
-2. Create/get vector store for space
+2. Create/get vector store for space (if first document)
 3. Download file from storage (or use content_text for notes)
-4. For images: Use GPT-4 Vision to extract text
-5. Upload file to OpenAI
-6. Add to vector store
-7. Update document status to 'ready'
+4. For images: Use GPT-4 Vision to extract text, save to content_text
+5. For PDFs: Attempt text extraction for preview (optional)
+6. Upload file to OpenAI Files API
+7. Add to vector store for semantic search
+8. Update document status to 'ready'
+
+Supported File Types:
+- PDF: Indexed as-is, text extraction attempted for preview
+- TXT: Direct text indexing
+- Images (PNG, JPG, WEBP, GIF): OCR via GPT-4 Vision
+- Notes: User-typed content, chunked for search
 ```
 
 ### Voice & Audio
@@ -1526,7 +1533,7 @@ The Documents tab uses a tabbed interface for adding content:
 
 | Input Tab | Purpose |
 |-----------|---------|
-| **Upload** | Drag/click to upload PDF, TXT, images |
+| **Upload** | Drag/click to upload PDF, TXT, images, screenshots |
 | **Paste** | Paste text content with title |
 | **Type** | Manually type information |
 | **Voice** | Record voice, auto-transcribe via Whisper |
@@ -1537,6 +1544,27 @@ Additional sections:
   - View: Opens dialog showing content preview
   - Edit: (Notes only) Edit title and content
   - Delete: Remove document from knowledge base
+
+### Document Preview & Download
+
+The document viewer provides different experiences based on file type:
+
+| File Type | Preview Method | Notes |
+|-----------|----------------|-------|
+| **Notes** | Inline text | Shows full content in scrollable area |
+| **Images** | Inline preview | Direct image display with signed URL |
+| **PDFs** | Open in new tab | Browser security blocks iframe embedding |
+| **Other** | Download only | Fallback for unsupported types |
+
+**Actions available for all file types:**
+- **Open in new tab**: Opens file in browser's native viewer
+- **Download**: Downloads file to user's device
+
+**Technical details:**
+- Files are stored in Supabase Storage `documents` bucket
+- Signed URLs (1-hour expiry) are generated for secure access
+- Images use GPT-4 Vision for text extraction during processing
+- PDFs are indexed by OpenAI Vector Store for AI search
 
 ### Sharing Features
 

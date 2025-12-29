@@ -96,12 +96,28 @@ GET /api-documents?space_id=<space_id>
       "id": "uuid",
       "filename": "document.txt",
       "file_type": "txt",
+      "file_path": "user-id/space-id/timestamp-filename.txt",
       "status": "ready",
+      "content_text": "Extracted text content...",
       "created_at": "2024-01-01T00:00:00Z"
     }
   ]
 }
 ```
+
+**Document Status Values:**
+- `uploading` - File is being uploaded to storage
+- `indexing` - File is being processed by AI
+- `ready` - Document is indexed and searchable
+- `failed` - Processing failed (check `error_message`)
+
+**Supported File Types:**
+| Type | Extension | Preview | AI Indexing |
+|------|-----------|---------|-------------|
+| PDF | `.pdf` | Download/New tab | OpenAI Vector Store |
+| Text | `.txt` | Inline text | OpenAI Vector Store |
+| Image | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif` | Inline image | GPT-4 Vision OCR |
+| Note | (user-typed) | Inline text | Document chunks |
 
 #### Get single document
 ```http
