@@ -64,22 +64,33 @@ serve(async (req) => {
 
       const vectorStoreId = shareLink.spaces.openai_vector_store_id;
       const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
-      if (!vectorStoreId) {
+
+      const defaultFallback = "I don't have that information in the provided documents.";
+      const ownerInstructions = shareLink.spaces.description || defaultFallback;
+
+      console.log('Using vector store:', vectorStoreId || 'none (using local content)');
+      console.log('Space ID:', shareLink.spaces.id);
+
+      console.log('Using vector store:', vectorStoreId);
+
+      // Get document content from our database as fallback/supplement
+      const { data: documents } = await supabase
+        .from('documents')
+        .select('filename, content_text')
+        .eq('space_id', shareLink.spaces.id);
+      
+      // Check if there are any documents at all
+      if ((!documents || documents.length === 0) && !vectorStoreId) {
         return new Response(JSON.stringify({ 
-          error: 'No documents have been uploaded to this space yet.' 
+          error: 'No documents have been added to this space yet.' 
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const defaultFallback = "I don't have that information in the provided documents.";
-      const ownerInstructions = shareLink.spaces.description || defaultFallback;
-
-      console.log('Using vector store:', vectorStoreId);
-
-      // Get document content from our database as fallback/supplement
-      const { data: documents } = await supabase
+      // Also get document content where available
+      const { data: docWithContent } = await supabase
         .from('documents')
         .select('filename, content_text')
         .eq('space_id', shareLink.spaces.id)
@@ -95,8 +106,8 @@ serve(async (req) => {
       let documentContext = '';
       
       // Add document content
-      if (documents && documents.length > 0) {
-        for (const doc of documents) {
+      if (docWithContent && docWithContent.length > 0) {
+        for (const doc of docWithContent) {
           if (doc.content_text) {
             documentContext += `\n--- ${doc.filename} ---\n${doc.content_text}\n`;
           }
@@ -113,44 +124,47 @@ serve(async (req) => {
 
       console.log('Document context length:', documentContext.length);
 
-      // Try vector store search with a more relevant query
-      const searchQueries = [message, 'name experience education skills background'];
+      // Try vector store search only if we have a vector store
       let vectorContext = '';
+      
+      if (vectorStoreId) {
+        const searchQueries = [message, 'name experience education skills background'];
 
-      for (const query of searchQueries) {
-        try {
-          const searchResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/search`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openaiApiKey}`,
-              'Content-Type': 'application/json',
-              'OpenAI-Beta': 'assistants=v2',
-            },
-            body: JSON.stringify({
-              query: query,
-              max_num_results: 10,
-            }),
-          });
+        for (const query of searchQueries) {
+          try {
+            const searchResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}/search`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${openaiApiKey}`,
+                'Content-Type': 'application/json',
+                'OpenAI-Beta': 'assistants=v2',
+              },
+              body: JSON.stringify({
+                query: query,
+                max_num_results: 10,
+              }),
+            });
 
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            if (searchData.data && searchData.data.length > 0) {
-              for (const result of searchData.data) {
-                if (result.content && Array.isArray(result.content)) {
-                  for (const content of result.content) {
-                    if (content.type === 'text' && content.text) {
-                      vectorContext += content.text + '\n\n';
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+              if (searchData.data && searchData.data.length > 0) {
+                for (const result of searchData.data) {
+                  if (result.content && Array.isArray(result.content)) {
+                    for (const content of result.content) {
+                      if (content.type === 'text' && content.text) {
+                        vectorContext += content.text + '\n\n';
+                      }
                     }
                   }
                 }
               }
             }
+          } catch (e) {
+            console.error('Vector search error:', e);
           }
-        } catch (e) {
-          console.error('Vector search error:', e);
+          
+          if (vectorContext.length > 0) break;
         }
-        
-        if (vectorContext.length > 0) break;
       }
 
       console.log('Vector context length:', vectorContext.length);
