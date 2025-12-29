@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import { WaveformIndicator } from '@/components/WaveformIndicator';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
   Mic, MicOff, Volume2, VolumeX, Square, Download, X
@@ -47,8 +48,8 @@ export default function PublicChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
-  // Voice recording hook
-  const { isRecording, isProcessing, toggleRecording } = useVoiceRecording({
+  // Voice recording hook with waveform support
+  const { isRecording, isProcessing, audioLevel, recordingDuration, toggleRecording } = useVoiceRecording({
     onTranscript: (text) => {
       setInput(prev => prev ? `${prev} ${text}` : text);
     },
@@ -59,7 +60,16 @@ export default function PublicChat() {
         variant: 'destructive',
       });
     },
+    maxDurationMs: 5 * 60 * 1000, // 5 minutes max
   });
+  
+  // Format recording duration
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
   
   // Text-to-speech hook
   const { speak, stop, isPlaying, isLoading: ttsLoading } = useTextToSpeech({
@@ -458,23 +468,35 @@ export default function PublicChat() {
           </div>
           
           <div className="flex gap-2">
-            {/* Voice Input Button */}
-            <Button
-              variant={isRecording ? "destructive" : "outline"}
-              size="icon"
-              onClick={toggleRecording}
-              disabled={isProcessing || sending}
-              className={`shrink-0 ${isRecording ? 'animate-pulse' : ''}`}
-              title={isRecording ? 'Stop recording' : 'Start voice input'}
-            >
-              {isProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : isRecording ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
+            {/* Voice Input Button with Waveform */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant={isRecording ? "destructive" : "outline"}
+                size="icon"
+                onClick={toggleRecording}
+                disabled={isProcessing || sending}
+                className="shrink-0"
+                title={isRecording ? 'Stop recording' : 'Start voice input'}
+              >
+                {isProcessing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </Button>
+              
+              {/* Waveform indicator and duration when recording */}
+              {isRecording && (
+                <div className="flex items-center gap-2 px-2 py-1 bg-destructive/10 rounded-md">
+                  <WaveformIndicator audioLevel={audioLevel} isRecording={isRecording} />
+                  <span className="text-xs font-mono text-destructive">
+                    {formatDuration(recordingDuration)}
+                  </span>
+                </div>
               )}
-            </Button>
+            </div>
             
             <Input
               value={input}
