@@ -722,6 +722,7 @@ share_link_id: uuid (FK → share_links.id)
 space_id: uuid (FK → spaces.id)
 role: text ('user' | 'assistant')
 content: text
+ai_model: text (OpenAI model used, only for assistant messages)
 created_at: timestamptz
 ```
 
@@ -840,6 +841,7 @@ CREATE TABLE public.chat_messages (
   share_link_id UUID NOT NULL REFERENCES public.share_links(id) ON DELETE CASCADE,
   role TEXT NOT NULL,  -- 'user' or 'assistant'
   content TEXT NOT NULL,
+  ai_model TEXT,  -- OpenAI model used (only for assistant messages)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

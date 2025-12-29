@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Eye, Link2, TrendingUp, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Eye, Link2, TrendingUp, Clock, Cpu, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface LinkAnalytics {
@@ -13,6 +14,11 @@ interface LinkAnalytics {
   created_at: string;
 }
 
+interface ModelUsage {
+  model: string;
+  count: number;
+}
+
 interface SpaceAnalyticsTabProps {
   spaceId: string;
 }
@@ -21,6 +27,8 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
   const [links, setLinks] = useState<LinkAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalViews, setTotalViews] = useState(0);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [modelUsage, setModelUsage] = useState<ModelUsage[]>([]);
   
   const { toast } = useToast();
 
@@ -30,7 +38,8 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
 
   const fetchAnalytics = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch share links
+      const { data: linksData, error } = await supabase
         .from('share_links')
         .select('*')
         .eq('space_id', spaceId)
@@ -39,9 +48,32 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
 
       if (error) throw error;
       
-      const linksData = data || [];
-      setLinks(linksData);
-      setTotalViews(linksData.reduce((sum, link) => sum + (link.view_count || 0), 0));
+      const links = linksData || [];
+      setLinks(links);
+      setTotalViews(links.reduce((sum, link) => sum + (link.view_count || 0), 0));
+
+      // Fetch message counts and model usage
+      const { data: messages } = await supabase
+        .from('chat_messages')
+        .select('role, ai_model')
+        .eq('space_id', spaceId);
+
+      if (messages) {
+        setTotalMessages(messages.length);
+        
+        // Calculate model usage from assistant messages
+        const modelCounts: Record<string, number> = {};
+        messages.forEach(msg => {
+          if (msg.role === 'assistant' && msg.ai_model) {
+            modelCounts[msg.ai_model] = (modelCounts[msg.ai_model] || 0) + 1;
+          }
+        });
+        
+        const usage = Object.entries(modelCounts)
+          .map(([model, count]) => ({ model, count }))
+          .sort((a, b) => b.count - a.count);
+        setModelUsage(usage);
+      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -80,7 +112,7 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
   return (
     <div className="space-y-6">
       {/* Stats cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Views</CardDescription>
@@ -109,6 +141,19 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
 
         <Card>
           <CardHeader className="pb-2">
+            <CardDescription>Total Messages</CardDescription>
+            <CardTitle className="text-3xl font-display">{totalMessages}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center text-sm text-muted-foreground">
+              <MessageSquare className="w-4 h-4 mr-1" />
+              Chat interactions
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
             <CardDescription>Avg Views/Link</CardDescription>
             <CardTitle className="text-3xl font-display">
               {links.length > 0 ? Math.round(totalViews / links.length) : 0}
@@ -122,6 +167,35 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* AI Model Usage */}
+      {modelUsage.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-display flex items-center gap-2">
+              <Cpu className="w-5 h-5" />
+              AI Model Usage
+            </CardTitle>
+            <CardDescription>Which models are being used for responses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              {modelUsage.map((usage) => (
+                <div 
+                  key={usage.model}
+                  className="flex items-center gap-2 p-3 rounded-lg bg-muted/50"
+                >
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {usage.model}
+                  </Badge>
+                  <span className="text-sm font-medium">{usage.count}</span>
+                  <span className="text-xs text-muted-foreground">responses</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Links table */}
       <Card>

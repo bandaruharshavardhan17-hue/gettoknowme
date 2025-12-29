@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, User, Bot, MessageSquare } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, User, Bot, MessageSquare, Cpu } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface ChatMessage {
@@ -11,6 +12,7 @@ interface ChatMessage {
   content: string;
   created_at: string;
   share_link_id: string;
+  ai_model?: string | null;
 }
 
 interface ShareLink {
@@ -48,7 +50,7 @@ export default function SpaceChatHistoryTab({ spaceId }: SpaceChatHistoryTabProp
       // Fetch chat messages for this space
       const { data: messagesData, error } = await supabase
         .from('chat_messages')
-        .select('*')
+        .select('id, role, content, created_at, share_link_id, ai_model')
         .eq('space_id', spaceId)
         .order('created_at', { ascending: false })
         .limit(500);
@@ -165,11 +167,17 @@ export default function SpaceChatHistoryTab({ spaceId }: SpaceChatHistoryTabProp
                         {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-xs font-medium capitalize">{msg.role}</span>
                           <span className="text-xs text-muted-foreground">
                             {format(new Date(msg.created_at), 'MMM d, h:mm a')}
                           </span>
+                          {msg.role === 'assistant' && msg.ai_model && (
+                            <Badge variant="outline" className="text-[10px] py-0 h-4 gap-1">
+                              <Cpu className="w-2.5 h-2.5" />
+                              {msg.ai_model}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words">
                           {msg.content}
