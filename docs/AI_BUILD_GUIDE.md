@@ -16,6 +16,7 @@
 | AI/LLM | OpenAI (GPT-4o-mini/4o) | `supabase/functions/public-chat/` |
 | Vector Search | OpenAI Vector Store | `supabase/functions/process-document/` |
 | Voice | OpenAI Whisper + TTS | `supabase/functions/voice-to-text/`, `text-to-speech/` |
+| Audio UI | WaveformIndicator | `src/components/WaveformIndicator.tsx` |
 
 ---
 
@@ -213,6 +214,11 @@ const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
 ### `voice-to-text`
 **Purpose**: Transcribe audio to text using Whisper
 
+**Features**:
+- Chunked base64 processing for large audio files
+- Support for recordings up to 5 minutes (configurable)
+- Memory-efficient processing with 32KB chunk size
+
 **Input**: Base64-encoded audio (WebM/Opus preferred)
 **Output**: `{ text: "transcribed text" }`
 
@@ -245,6 +251,7 @@ const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
 | `SpaceChatHistoryTab` | View conversations with AI model badges |
 | `SpaceAnalyticsTab` | View stats + AI model usage |
 | `PublicChat` | Visitor chat interface |
+| `WaveformIndicator` | Audio level visualization during recording |
 
 ### Route Structure
 

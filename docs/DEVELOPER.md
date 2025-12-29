@@ -55,6 +55,7 @@ src/
 ├── components/
 │   ├── ui/                    # shadcn/ui components (don't edit directly)
 │   ├── QRCodeDialog.tsx       # QR code display component
+│   ├── WaveformIndicator.tsx  # Audio level visualization during recording
 │   ├── ProtectedRoute.tsx     # Auth guard wrapper
 │   ├── AdminRoute.tsx         # Admin-only route guard
 │   └── ProfileDropdown.tsx    # User menu component
@@ -244,17 +245,26 @@ Supported file types:
 
 ### Testing Voice Recording
 
-1. Navigate to a space → Voice tab
+1. Navigate to a space → Voice tab or use Public Chat
 2. Click the microphone button to start recording
-3. Speak clearly for 1-2 seconds minimum
-4. Click again to stop and transcribe
-5. Review transcript before saving
+3. **Visual Feedback**: Waveform indicator shows audio levels in real-time
+4. **Duration Display**: Recording time shown next to waveform
+5. Speak clearly for 1-2 seconds minimum
+6. Click again to stop and transcribe
+7. Review transcript before saving
+
+**Features**:
+- Visual waveform indicator during recording
+- Recording duration display (up to 5 minutes max)
+- Chunked processing for longer recordings
+- Auto-stop at maximum duration
 
 **Troubleshooting Voice Issues:**
 - Ensure browser has microphone permissions
 - Speak for at least 1 second (short recordings may fail)
-- Check console logs for debug output
+- Check console logs for debug output (`Using mime type:`, `Audio blob size:`)
 - Verify OPENAI_API_KEY is configured
+- Large recordings (>25MB) are processed in chunks automatically
 
 ### Running E2E Tests
 
@@ -316,17 +326,50 @@ npm run build
 
 ### Voice Recording Hook
 
-The `useVoiceRecording` hook uses callback refs to avoid React hooks dependency issues:
+The `useVoiceRecording` hook provides advanced audio recording with visual feedback:
+
+**Features**:
+- Real-time audio level monitoring for waveform visualization
+- Chunked processing for large audio files (up to 5 minutes)
+- Recording duration tracking with auto-stop at max duration
+- Memory-efficient base64 processing
 
 ```typescript
-// Store callbacks in refs to avoid dependency changes
-const onTranscriptRef = useRef(onTranscript);
-onTranscriptRef.current = onTranscript;
-
-const processAudio = useCallback(async () => {
-  // Use onTranscriptRef.current instead of onTranscript
-}, []); // Empty deps - refs don't need to be dependencies
+const { 
+  isRecording, 
+  isProcessing, 
+  audioLevel,        // 0-1 normalized audio level for waveform
+  recordingDuration, // Current recording duration in ms
+  toggleRecording 
+} = useVoiceRecording({
+  onTranscript: (text) => setInput(text),
+  onError: (error) => toast({ title: 'Error', description: error }),
+  maxDurationMs: 5 * 60 * 1000, // 5 minutes max
+});
 ```
+
+**Implementation Details**:
+- Uses callback refs to avoid React hooks dependency issues
+- AudioContext and AnalyserNode for real-time audio level monitoring
+- RequestAnimationFrame for smooth waveform updates
+- Automatic cleanup on unmount
+
+### Waveform Indicator Component
+
+The `WaveformIndicator` component visualizes audio levels during recording:
+
+```typescript
+<WaveformIndicator 
+  audioLevel={audioLevel}  // 0-1 normalized value
+  isRecording={isRecording}
+  className="optional-class"
+/>
+```
+
+Features:
+- 5-bar equalizer-style visualization
+- Smooth transitions with CSS transitions
+- Color changes based on recording state (destructive when recording)
 
 ### Add Knowledge UI
 
@@ -350,8 +393,9 @@ The selected model is stored in `spaces.ai_model` and used by `public-chat` edge
 The visitor chat interface (`PublicChat.tsx`) includes:
 - **Save Chat** - Download conversation as a text file
 - **Close Chat** - Closes with optional download prompt
-- **Voice Input** - Microphone recording with transcription
+- **Voice Input** - Microphone recording with waveform visualization and duration display
 - **Text-to-Speech** - Listen to AI responses
+- **Auto-read** - Toggle automatic TTS for AI responses
 
 ---
 
