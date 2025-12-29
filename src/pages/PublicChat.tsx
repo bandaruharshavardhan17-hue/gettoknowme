@@ -10,7 +10,7 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { WaveformIndicator } from '@/components/WaveformIndicator';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
-  Mic, MicOff, Volume2, VolumeX, Square, Download, X
+  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ interface Message {
   content: string;
   citations?: string[];
   errorType?: 'rate_limit' | 'service_unavailable' | 'no_documents' | 'network' | 'unknown';
+  retryCount?: number;
 }
 
 interface SpaceInfo {
@@ -67,6 +68,35 @@ const getErrorMessage = (status: number, errorBody?: string): { message: string;
   };
 };
 
+// Exponential backoff delay calculator
+const getRetryDelay = (attempt: number): number => {
+  const baseDelay = 1000; // 1 second
+  const maxDelay = 30000; // 30 seconds max
+  const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+  // Add some jitter to prevent thundering herd
+  return delay + Math.random() * 1000;
+};
+
+// Custom hook for online/offline detection
+const useOnlineStatus = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  return isOnline;
+};
+
 export default function PublicChat() {
   const { token } = useParams<{ token: string }>();
   const [spaceInfo, setSpaceInfo] = useState<SpaceInfo | null>(null);
@@ -77,8 +107,13 @@ export default function PublicChat() {
   const [error, setError] = useState<string | null>(null);
   const [autoPlayTTS, setAutoPlayTTS] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  
+  const isOnline = useOnlineStatus();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   
   // Voice recording hook with waveform support
@@ -140,13 +175,28 @@ export default function PublicChat() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || sending) return;
+  const sendMessage = async (messageToSend?: string, attempt: number = 0) => {
+    const userMessage = messageToSend || input.trim();
+    if (!userMessage || sending || retrying) return;
 
-    const userMessage = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Don't send if offline
+    if (!isOnline) {
+      toast({
+        title: 'No connection',
+        description: 'Please check your internet connection and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Only add user message on first attempt
+    if (attempt === 0) {
+      setInput('');
+      setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    }
+    
     setSending(true);
+    setRetryAttempt(attempt);
 
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-chat`, {
@@ -159,7 +209,7 @@ export default function PublicChat() {
           token, 
           action: 'chat',
           message: userMessage,
-          history: messages.slice(-10) // Send last 10 messages for context
+          history: messages.filter(m => m.role !== 'error').slice(-10)
         }),
       });
 
@@ -167,13 +217,48 @@ export default function PublicChat() {
         const errorBody = await response.text().catch(() => '');
         const { message, errorType } = getErrorMessage(response.status, errorBody);
         
-        // Add error as a message in the chat instead of just a toast
-        setMessages(prev => [...prev, { 
-          role: 'error', 
-          content: message,
-          errorType
-        }]);
+        // Check if we should retry (for retryable errors)
+        const isRetryable = errorType === 'service_unavailable' || errorType === 'network';
+        const maxRetries = 3;
+        
+        if (isRetryable && attempt < maxRetries) {
+          const delay = getRetryDelay(attempt);
+          setRetrying(true);
+          setSending(false);
+          
+          // Show retrying message
+          setMessages(prev => {
+            const filtered = prev.filter(m => m.role !== 'error' || !m.retryCount);
+            return [...filtered, { 
+              role: 'error', 
+              content: `Connection issue. Retrying in ${Math.ceil(delay / 1000)} seconds... (Attempt ${attempt + 2}/${maxRetries + 1})`,
+              errorType: 'network',
+              retryCount: attempt + 1
+            }];
+          });
+          
+          retryTimeoutRef.current = setTimeout(() => {
+            // Remove the retrying message
+            setMessages(prev => prev.filter(m => !m.retryCount));
+            setRetrying(false);
+            sendMessage(userMessage, attempt + 1);
+          }, delay);
+          return;
+        }
+        
+        // Add final error message after all retries exhausted
+        setMessages(prev => {
+          const filtered = prev.filter(m => !m.retryCount);
+          return [...filtered, { 
+            role: 'error', 
+            content: attempt > 0 
+              ? `${message} We tried ${attempt + 1} times but couldn't connect.`
+              : message,
+            errorType
+          }];
+        });
         setSending(false);
+        setRetrying(false);
         return;
       }
 
@@ -237,19 +322,75 @@ export default function PublicChat() {
       if (autoPlayTTS && assistantContent.trim()) {
         speak(assistantContent);
       }
+      // Reset retry state on success
+      setRetryAttempt(0);
+      setRetrying(false);
     } catch (err) {
-      // Network error - show inline in chat
-      const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
-      setMessages(prev => [...prev, { 
-        role: 'error', 
-        content: isNetworkError 
-          ? "Unable to connect. Please check your internet connection and try again."
-          : "Something went wrong. Please try sending your message again.",
-        errorType: isNetworkError ? 'network' : 'unknown'
-      }]);
+      // Network error - attempt retry with exponential backoff
+      const maxRetries = 3;
+      
+      if (attempt < maxRetries) {
+        const delay = getRetryDelay(attempt);
+        setRetrying(true);
+        setSending(false);
+        
+        // Find the last user message to retry
+        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+        
+        setMessages(prev => {
+          const filtered = prev.filter(m => !m.retryCount);
+          return [...filtered, { 
+            role: 'error', 
+            content: `Connection issue. Retrying in ${Math.ceil(delay / 1000)} seconds... (Attempt ${attempt + 2}/${maxRetries + 1})`,
+            errorType: 'network',
+            retryCount: attempt + 1
+          }];
+        });
+        
+        retryTimeoutRef.current = setTimeout(() => {
+          setMessages(prev => prev.filter(m => !m.retryCount));
+          setRetrying(false);
+          if (lastUserMsg) {
+            sendMessage(lastUserMsg.content, attempt + 1);
+          }
+        }, delay);
+        return;
+      }
+      
+      // Final error after all retries exhausted
+      setMessages(prev => {
+        const filtered = prev.filter(m => !m.retryCount);
+        return [...filtered, { 
+          role: 'error', 
+          content: attempt > 0 
+            ? "Unable to connect after multiple attempts. Please check your internet connection and try again."
+            : "Something went wrong. Please try sending your message again.",
+          errorType: 'network'
+        }];
+      });
+      setRetrying(false);
     } finally {
       setSending(false);
     }
+  };
+
+  // Cleanup retry timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Cancel retry when going offline
+  const cancelRetry = () => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    setRetrying(false);
+    setMessages(prev => prev.filter(m => !m.retryCount));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -332,6 +473,30 @@ export default function PublicChat() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-accent/10">
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="bg-amber-500/90 text-amber-950 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
+          <WifiOff className="w-4 h-4" />
+          <span>You're offline. Messages will be sent when you reconnect.</span>
+        </div>
+      )}
+      
+      {/* Retrying Banner */}
+      {retrying && isOnline && (
+        <div className="bg-primary/10 text-primary px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          <span>Reconnecting...</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={cancelRetry}
+            className="h-6 px-2 text-xs ml-2"
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+      
       {/* Header */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b border-border/50">
         <div className="container flex items-center justify-between h-16 px-4">
@@ -582,8 +747,8 @@ export default function PublicChat() {
               className="flex-1"
             />
             <Button 
-              onClick={sendMessage}
-              disabled={!input.trim() || sending}
+              onClick={() => sendMessage()}
+              disabled={!input.trim() || sending || retrying}
               className="gradient-primary text-primary-foreground shrink-0"
             >
               {sending ? (
