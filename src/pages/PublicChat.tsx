@@ -9,8 +9,18 @@ import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
-  Mic, MicOff, Volume2, VolumeX, Square
+  Mic, MicOff, Volume2, VolumeX, Square, Download, X
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,6 +42,7 @@ export default function PublicChat() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoPlayTTS, setAutoPlayTTS] = useState(false);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -198,6 +209,50 @@ export default function PublicChat() {
     }
   };
 
+  const downloadChat = () => {
+    if (messages.length === 0) {
+      toast({
+        title: 'No messages',
+        description: 'Start a conversation first to download it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const chatContent = messages.map(m => {
+      const role = m.role === 'user' ? 'You' : spaceInfo?.name || 'Assistant';
+      let text = `${role}:\n${m.content}`;
+      if (m.citations && m.citations.length > 0) {
+        text += `\n\nSources:\n${m.citations.map(c => `- "${c}"`).join('\n')}`;
+      }
+      return text;
+    }).join('\n\n---\n\n');
+
+    const header = `Chat with ${spaceInfo?.name || 'Knowledge Base'}\nDownloaded: ${new Date().toLocaleString()}\n\n${'='.repeat(50)}\n\n`;
+    const fullContent = header + chatContent;
+
+    const blob = new Blob([fullContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-${spaceInfo?.name?.replace(/\s+/g, '-').toLowerCase() || 'conversation'}-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Chat downloaded',
+      description: 'Your conversation has been saved.',
+    });
+  };
+
+  const closeChat = () => {
+    window.close();
+    // Fallback if window.close() doesn't work (common in browsers)
+    window.location.href = 'about:blank';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-accent/20">
@@ -229,9 +284,9 @@ export default function PublicChat() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-accent/10">
       {/* Header */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b border-border/50">
-        <div className="container flex items-center h-16 px-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-md">
+        <div className="container flex items-center justify-between h-16 px-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-md shrink-0">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <div className="min-w-0">
@@ -240,6 +295,38 @@ export default function PublicChat() {
                 <p className="text-sm text-muted-foreground truncate">{spaceInfo.description}</p>
               )}
             </div>
+          </div>
+          
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadChat}
+              disabled={messages.length === 0}
+              className="hidden sm:flex"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Save Chat
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={downloadChat}
+              disabled={messages.length === 0}
+              className="sm:hidden"
+              title="Save chat"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowCloseDialog(true)}
+              title="Close chat"
+            >
+              <X className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
@@ -414,6 +501,38 @@ export default function PublicChat() {
           </p>
         </div>
       </footer>
+
+      {/* Close Chat Confirmation Dialog */}
+      <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close this chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {messages.length > 0 
+                ? "Your conversation will not be saved. Would you like to download it first?"
+                : "Are you sure you want to close this chat?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            {messages.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  downloadChat();
+                  setShowCloseDialog(false);
+                }}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download & Stay
+              </Button>
+            )}
+            <AlertDialogAction onClick={closeChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Close Chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
