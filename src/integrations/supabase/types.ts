@@ -214,6 +214,7 @@ export type Database = {
       }
       spaces: {
         Row: {
+          ai_model: string | null
           created_at: string
           description: string | null
           id: string
@@ -223,6 +224,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_model?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -232,6 +234,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_model?: string | null
           created_at?: string
           description?: string | null
           id?: string

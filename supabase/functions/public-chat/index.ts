@@ -22,7 +22,7 @@ serve(async (req) => {
     // Validate token
     const { data: shareLink, error: linkError } = await supabase
       .from('share_links')
-      .select('*, spaces(id, name, description, openai_vector_store_id)')
+      .select('*, spaces(id, name, description, openai_vector_store_id, ai_model)')
       .eq('token', token)
       .eq('revoked', false)
       .single();
@@ -63,7 +63,7 @@ serve(async (req) => {
       }
 
       const vectorStoreId = shareLink.spaces.openai_vector_store_id;
-
+      const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
       if (!vectorStoreId) {
         return new Response(JSON.stringify({ 
           error: 'No documents have been uploaded to this space yet.' 
@@ -188,6 +188,8 @@ Your response should be: "${ownerInstructions}"`;
         { role: 'user', content: message }
       ];
 
+      console.log('Using AI model:', aiModel);
+
       // Use Chat Completions API
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -196,7 +198,7 @@ Your response should be: "${ownerInstructions}"`;
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: aiModel,
           messages: messages,
           stream: true,
           max_tokens: 1000,
