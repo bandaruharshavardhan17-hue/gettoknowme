@@ -236,10 +236,20 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 3. Open the chat URL in incognito window
 
 **Resilience Features:**
-- **Offline Detection**: Shows banner when connection lost, hides send button
+- **Offline Detection**: Shows banner when connection lost with queue count
+- **Message Queue**: Messages typed while offline are queued and sent automatically when reconnected
+- **Pending Indicator**: Queued messages show spinner icon and "Waiting to send..." text
 - **Auto-Retry**: Failed requests retry up to 3 times with exponential backoff (1s, 2s, 4s + jitter)
 - **Retry Cancellation**: User can cancel retry via banner button
+- **Queue Processing**: When connection restored, queued messages sent in order with "Processing queue" banner
 - **Error Messages**: Inline error cards with contextual icons and "Try again" button
+
+**Testing Offline Mode:**
+1. Open chat in browser
+2. Disable network (DevTools → Network → Offline)
+3. Type and send a message → Should show "Message queued" toast
+4. Message appears with pending indicator
+5. Re-enable network → Messages auto-send with success toast
 
 ### Testing Document Uploads
 
