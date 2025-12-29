@@ -266,9 +266,12 @@ Supported file types:
 - Verify OPENAI_API_KEY is configured
 - Large recordings (>25MB) are processed in chunks automatically
 
-### Running E2E Tests
+### Running Tests
 
-Navigate to `/owner/test` in the app to run comprehensive tests:
+Navigate to `/owner/test` in the app to run tests. The Test Runner has two tabs:
+
+#### E2E Tests Tab
+Runs comprehensive end-to-end tests:
 
 1. **Create Space** - Creates a test space
 2. **Create Document (Note)** - Adds test content
@@ -279,6 +282,16 @@ Navigate to `/owner/test` in the app to run comprehensive tests:
 7. **Public Chat - Message** - Tests AI response
 8. **Verify Analytics** - Checks view counts
 9. **Cleanup** - Removes all test data
+
+#### Voice Recording Tests Tab
+Runs unit tests for the `useVoiceRecording` hook:
+
+1. **Audio Level Calculation** - Tests normalized level computation (silent: 0, mid: ~0.5, max: 1)
+2. **Duration Tracking** - Tests time formatting and max duration checks
+3. **Chunked Audio Processing** - Tests chunk size logic for large files
+4. **Audio Blob Validation** - Tests minimum size requirements
+5. **MIME Type Support** - Tests codec selection fallbacks
+6. **Waveform Bar Calculation** - Tests visual bar height generation
 
 ### Adding Admin Users
 
