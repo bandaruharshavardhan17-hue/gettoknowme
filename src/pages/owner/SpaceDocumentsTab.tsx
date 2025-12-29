@@ -72,9 +72,10 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   const [instructionsSaved, setInstructionsSaved] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // AI model state
+  // AI model state - use ref to track if initial load is done
   const [selectedModel, setSelectedModel] = useState(aiModel || 'gpt-4o-mini');
   const [savingModel, setSavingModel] = useState(false);
+  const initialModelLoadedRef = useRef(false);
   
   // Input tab state
   const [activeInputTab, setActiveInputTab] = useState('upload');
@@ -157,8 +158,13 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
     setInstructionsSaved(false);
   }, [description]);
 
+  // Only sync from prop on initial load, not on subsequent prop changes
+  // This prevents the model from resetting when parent re-renders
   useEffect(() => {
-    setSelectedModel(aiModel || 'gpt-4o-mini');
+    if (!initialModelLoadedRef.current && aiModel) {
+      setSelectedModel(aiModel);
+      initialModelLoadedRef.current = true;
+    }
   }, [aiModel]);
 
   const handleModelChange = async (model: string) => {
