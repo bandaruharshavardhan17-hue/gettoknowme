@@ -408,21 +408,43 @@ DELETE /api-admin?resource=spaces&id=<space_id>
 
 ### 7. Voice-to-Text API (`/voice-to-text`)
 
-Transcribes audio to text using OpenAI Whisper.
+Transcribes audio to text using OpenAI Whisper. No JWT verification required.
 
 ```http
 POST /voice-to-text
-Authorization: Bearer <token>
 Content-Type: application/json
 
 {
   "audio": "<base64_encoded_audio>"
 }
 ```
+
+**Audio Requirements:**
+- Format: WebM with Opus codec (preferred), WebM, or MP4
+- Minimum duration: ~1 second
+- Sample rate: Any (Whisper handles resampling)
+- The audio should be base64 encoded from a Blob
+
+**Client-side recording example:**
+```typescript
+const mediaRecorder = new MediaRecorder(stream, { 
+  mimeType: 'audio/webm;codecs=opus',
+  audioBitsPerSecond: 128000
+});
+mediaRecorder.start(250); // Collect chunks every 250ms
+```
+
 **Response:**
 ```json
 {
   "text": "Transcribed text here..."
+}
+```
+
+**Error Response:**
+```json
+{
+  "error": "No audio data provided"
 }
 ```
 

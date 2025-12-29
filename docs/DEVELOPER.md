@@ -242,6 +242,34 @@ Supported file types:
 - **Images**: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif` - Inline preview + OCR extraction
 - **Screenshots**: Same as images, OCR extracts visible text
 
+### Testing Voice Recording
+
+1. Navigate to a space → Voice tab
+2. Click the microphone button to start recording
+3. Speak clearly for 1-2 seconds minimum
+4. Click again to stop and transcribe
+5. Review transcript before saving
+
+**Troubleshooting Voice Issues:**
+- Ensure browser has microphone permissions
+- Speak for at least 1 second (short recordings may fail)
+- Check console logs for debug output
+- Verify OPENAI_API_KEY is configured
+
+### Running E2E Tests
+
+Navigate to `/owner/test` in the app to run comprehensive tests:
+
+1. **Create Space** - Creates a test space
+2. **Create Document (Note)** - Adds test content
+3. **Voice-to-Text API** - Verifies Whisper endpoint
+4. **Image Processing** - Checks image OCR capability
+5. **Create Share Link** - Generates shareable token
+6. **Public Chat - Validate** - Tests link validation
+7. **Public Chat - Message** - Tests AI response
+8. **Verify Analytics** - Checks view counts
+9. **Cleanup** - Removes all test data
+
 ### Adding Admin Users
 
 ```sql
@@ -254,6 +282,7 @@ VALUES ('user-uuid-here', 'admin');
 - Use TypeScript strict mode
 - Prefer functional components with hooks
 - Use `useCallback` and `useMemo` for performance
+- Store callback refs to avoid dependency issues in hooks
 - Follow shadcn/ui patterns for new components
 - Use semantic color tokens from design system
 
@@ -282,3 +311,28 @@ supabase functions deploy
 # Build frontend
 npm run build
 ```
+
+## Key Implementation Notes
+
+### Voice Recording Hook
+
+The `useVoiceRecording` hook uses callback refs to avoid React hooks dependency issues:
+
+```typescript
+// Store callbacks in refs to avoid dependency changes
+const onTranscriptRef = useRef(onTranscript);
+onTranscriptRef.current = onTranscript;
+
+const processAudio = useCallback(async () => {
+  // Use onTranscriptRef.current instead of onTranscript
+}, []); // Empty deps - refs don't need to be dependencies
+```
+
+### Add Knowledge UI
+
+The "Add Knowledge" section uses a 3-tab layout:
+- **Upload** - File uploads (PDF, TXT, images)
+- **Note** - Combined paste/type content entry
+- **Voice** - Voice recording with transcription
+
+Note: "Paste" and "Type" were consolidated into a single "Note" tab as they served identical functionality.
