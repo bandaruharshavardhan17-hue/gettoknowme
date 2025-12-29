@@ -79,6 +79,7 @@ serve(async (req) => {
     let fileContent: Blob;
     let filename = doc.filename;
     const isImage = doc.file_type === 'image';
+    const isPdf = doc.file_type === 'pdf';
 
     // Get file content
     if (doc.file_type === 'note') {
@@ -166,6 +167,75 @@ serve(async (req) => {
         // Create a text file for OpenAI indexing
         fileContent = new Blob([`[Image: ${doc.filename}]\n\n${extractedText}`], { type: 'text/plain' });
         filename = `${doc.filename.split('.')[0]}.txt`;
+      } else if (isPdf) {
+        // For PDFs, we use the Vision API to extract text from pages
+        console.log('Processing PDF file');
+        
+        // Keep the original PDF for OpenAI indexing
+        fileContent = fileData;
+        
+        // Try to extract text preview using Vision API on first page
+        // Note: Full PDF text is indexed by OpenAI, this is just for preview
+        try {
+          const arrayBuffer = await fileData.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          // Convert to base64 in chunks
+          let binaryString = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            const chunk = uint8Array.slice(i, i + chunkSize);
+            binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+          }
+          const base64Pdf = btoa(binaryString);
+          
+          // Use GPT to summarize/extract key info from PDF (OpenAI handles PDF natively now)
+          const pdfResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Extract and summarize all the key text content from this PDF document. Include main headings, key points, and important details. Format it in a readable way.',
+                    },
+                    {
+                      type: 'file',
+                      file: {
+                        filename: doc.filename,
+                        file_data: `data:application/pdf;base64,${base64Pdf}`,
+                      },
+                    },
+                  ],
+                },
+              ],
+              max_tokens: 4096,
+            }),
+          });
+
+          if (pdfResponse.ok) {
+            const pdfData = await pdfResponse.json();
+            const extractedText = pdfData.choices?.[0]?.message?.content;
+            if (extractedText) {
+              console.log('Extracted text preview from PDF');
+              await supabase.from('documents').update({ 
+                content_text: extractedText 
+              }).eq('id', documentId);
+            }
+          } else {
+            console.log('PDF text extraction not available, using embedded viewer for preview');
+          }
+        } catch (extractError) {
+          console.log('PDF text extraction failed, continuing with file upload:', extractError);
+          // Continue without text extraction - PDF will still be viewable in iframe
+        }
       } else {
         fileContent = fileData;
       }
