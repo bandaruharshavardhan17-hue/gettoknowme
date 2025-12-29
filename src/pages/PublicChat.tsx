@@ -29,6 +29,7 @@ interface Message {
   citations?: string[];
   errorType?: 'rate_limit' | 'service_unavailable' | 'no_documents' | 'network' | 'unknown';
   retryCount?: number;
+  pending?: boolean; // For queued messages waiting to be sent
 }
 
 interface SpaceInfo {
@@ -109,11 +110,14 @@ export default function PublicChat() {
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
+  const [messageQueue, setMessageQueue] = useState<string[]>([]);
+  const [processingQueue, setProcessingQueue] = useState(false);
   
   const isOnline = useOnlineStatus();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const queueProcessingRef = useRef(false);
   const { toast } = useToast();
   
   // Voice recording hook with waveform support
@@ -175,24 +179,36 @@ export default function PublicChat() {
     }
   };
 
-  const sendMessage = async (messageToSend?: string, attempt: number = 0) => {
+  const sendMessage = async (messageToSend?: string, attempt: number = 0, fromQueue: boolean = false) => {
     const userMessage = messageToSend || input.trim();
     if (!userMessage || sending || retrying) return;
 
-    // Don't send if offline
-    if (!isOnline) {
+    // Queue message if offline (unless already from queue processing)
+    if (!isOnline && !fromQueue) {
+      setInput('');
+      // Add message as pending
+      setMessages(prev => [...prev, { role: 'user', content: userMessage, pending: true }]);
+      setMessageQueue(prev => [...prev, userMessage]);
       toast({
-        title: 'No connection',
-        description: 'Please check your internet connection and try again.',
-        variant: 'destructive',
+        title: 'Message queued',
+        description: 'Your message will be sent when you reconnect.',
       });
       return;
     }
 
-    // Only add user message on first attempt
-    if (attempt === 0) {
+    // Only add user message on first attempt (if not already added as pending)
+    if (attempt === 0 && !fromQueue) {
       setInput('');
       setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    }
+    
+    // If from queue, mark the pending message as no longer pending
+    if (fromQueue && attempt === 0) {
+      setMessages(prev => prev.map(m => 
+        m.role === 'user' && m.content === userMessage && m.pending 
+          ? { ...m, pending: false } 
+          : m
+      ));
     }
     
     setSending(true);
@@ -383,6 +399,54 @@ export default function PublicChat() {
     };
   }, []);
 
+  // Process queued messages when coming back online
+  useEffect(() => {
+    const processQueue = async () => {
+      if (!isOnline || messageQueue.length === 0 || queueProcessingRef.current || sending) {
+        return;
+      }
+      
+      queueProcessingRef.current = true;
+      setProcessingQueue(true);
+      
+      // Process messages one at a time
+      const queueCopy = [...messageQueue];
+      setMessageQueue([]);
+      
+      for (const queuedMessage of queueCopy) {
+        // Wait for any ongoing send to complete
+        await new Promise<void>(resolve => {
+          const checkSending = () => {
+            if (!sending && !retrying) {
+              resolve();
+            } else {
+              setTimeout(checkSending, 100);
+            }
+          };
+          checkSending();
+        });
+        
+        // Send the queued message
+        await sendMessage(queuedMessage, 0, true);
+        
+        // Small delay between queued messages
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
+      queueProcessingRef.current = false;
+      setProcessingQueue(false);
+      
+      if (queueCopy.length > 0) {
+        toast({
+          title: 'Messages sent',
+          description: `${queueCopy.length} queued message${queueCopy.length > 1 ? 's' : ''} sent successfully.`,
+        });
+      }
+    };
+    
+    processQueue();
+  }, [isOnline, messageQueue.length, sending, retrying]);
+
   // Cancel retry when going offline
   const cancelRetry = () => {
     if (retryTimeoutRef.current) {
@@ -477,7 +541,23 @@ export default function PublicChat() {
       {!isOnline && (
         <div className="bg-amber-500/90 text-amber-950 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
           <WifiOff className="w-4 h-4" />
-          <span>You're offline. Messages will be sent when you reconnect.</span>
+          <span>
+            You're offline.
+            {messageQueue.length > 0 && (
+              <span className="ml-1">
+                {messageQueue.length} message{messageQueue.length > 1 ? 's' : ''} queued.
+              </span>
+            )}
+            {messageQueue.length === 0 && ' Messages will be queued until you reconnect.'}
+          </span>
+        </div>
+      )}
+      
+      {/* Processing Queue Banner */}
+      {processingQueue && isOnline && (
+        <div className="bg-green-500/20 text-green-700 dark:text-green-400 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          <span>Sending queued messages...</span>
         </div>
       )}
       
@@ -570,13 +650,19 @@ export default function PublicChat() {
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   message.role === 'user' 
-                    ? 'bg-primary text-primary-foreground'
+                    ? message.pending 
+                      ? 'bg-primary/50 text-primary-foreground/70'
+                      : 'bg-primary text-primary-foreground'
                     : message.role === 'error'
                     ? 'bg-destructive/20 text-destructive'
                     : 'gradient-primary text-primary-foreground'
                 }`}>
                   {message.role === 'user' ? (
-                    <User className="w-4 h-4" />
+                    message.pending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <User className="w-4 h-4" />
+                    )
                   ) : message.role === 'error' ? (
                     <AlertCircle className="w-4 h-4" />
                   ) : (
@@ -589,7 +675,9 @@ export default function PublicChat() {
                 }`}>
                   <Card className={`inline-block ${
                     message.role === 'user' 
-                      ? 'bg-primary text-primary-foreground'
+                      ? message.pending
+                        ? 'bg-primary/50 text-primary-foreground/70'
+                        : 'bg-primary text-primary-foreground'
                       : message.role === 'error'
                       ? 'bg-destructive/10 border-destructive/30'
                       : 'bg-card'
@@ -624,6 +712,13 @@ export default function PublicChat() {
                         <>
                           <p className="whitespace-pre-wrap">{message.content}</p>
                           
+                          {/* Pending indicator for queued messages */}
+                          {message.pending && (
+                            <p className="text-xs mt-1 opacity-60 flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Waiting to send...
+                            </p>
+                          )}
                           {message.citations && message.citations.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-border/30">
                               <p className="text-xs font-medium mb-2 opacity-70">Sources:</p>

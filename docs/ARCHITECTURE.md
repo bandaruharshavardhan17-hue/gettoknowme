@@ -315,9 +315,16 @@ Step 7: Error Handling & Resilience
       ├─ User can cancel retry manually
       └─ Final error message with "Try again" button
   └─► If offline:
-      ├─ Offline banner displayed at top
-      ├─ Send disabled until connection restored
-      └─ Automatic reconnection detection
+      ├─ Offline banner displayed at top with queue count
+      ├─ Messages queued locally with visual "pending" indicator
+      ├─ Queue counter shows number of waiting messages
+      └─ Automatic send when connection restored
+  └─► Message Queue System:
+      ├─ Messages typed while offline are queued
+      ├─ Visual spinner icon on pending messages
+      ├─ "Processing queue" banner when reconnecting
+      ├─ Toast notification when queue is processed
+      └─ Messages sent in order, one at a time
 
 DATABASE CHANGES:
   - UPDATE share_links SET view_count = view_count + 1, last_used_at = now()
