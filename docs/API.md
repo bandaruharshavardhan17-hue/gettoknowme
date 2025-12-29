@@ -390,6 +390,49 @@ DELETE /api-admin?resource=spaces&id=<space_id>
 
 ---
 
+### 7. Voice-to-Text API (`/voice-to-text`)
+
+Transcribes audio to text using OpenAI Whisper.
+
+```http
+POST /voice-to-text
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "audio": "<base64_encoded_audio>"
+}
+```
+**Response:**
+```json
+{
+  "text": "Transcribed text here..."
+}
+```
+
+---
+
+### 8. Text-to-Speech API (`/text-to-speech`)
+
+Generates speech audio from text using OpenAI TTS.
+
+```http
+POST /text-to-speech
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "text": "Hello, how can I help you?",
+  "voice": "alloy"
+}
+```
+
+**Available voices:** `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`
+
+**Response:** Binary audio (audio/mpeg)
+
+---
+
 ## Error Responses
 
 All endpoints return errors in this format:
