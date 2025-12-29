@@ -6,10 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode
+  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
+  Eye, Pencil, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
@@ -21,6 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 type DocumentStatus = 'uploading' | 'indexing' | 'ready' | 'failed';
@@ -49,31 +56,42 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [instructionsSaved, setInstructionsSaved] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Note dialog state
-  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
+  // Input tab state
+  const [activeInputTab, setActiveInputTab] = useState('upload');
   
-  // Quick add dialog state
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [quickAddTitle, setQuickAddTitle] = useState('');
-  const [quickAddContent, setQuickAddContent] = useState('');
-  const [savingQuickAdd, setSavingQuickAdd] = useState(false);
+  // Paste content state
+  const [pasteTitle, setPasteTitle] = useState('');
+  const [pasteContent, setPasteContent] = useState('');
+  const [savingPaste, setSavingPaste] = useState(false);
+  
+  // Type info state
+  const [typeTitle, setTypeTitle] = useState('');
+  const [typeContent, setTypeContent] = useState('');
+  const [savingType, setSavingType] = useState(false);
+  
+  // Voice note state
+  const [voiceTitle, setVoiceTitle] = useState('');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [savingVoice, setSavingVoice] = useState(false);
   
   // Share link state
   const [creatingLink, setCreatingLink] = useState(false);
   const [existingLinkToken, setExistingLinkToken] = useState<string | null>(null);
   const [loadingLink, setLoadingLink] = useState(true);
   
-  // Voice recording dialog state
-  const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
-  const [voiceNoteTitle, setVoiceNoteTitle] = useState('');
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [savingVoiceNote, setSavingVoiceNote] = useState(false);
-  
   // QR code dialog state
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  
+  // View/Edit document dialog
+  const [viewDocDialog, setViewDocDialog] = useState(false);
+  const [editDocDialog, setEditDocDialog] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  
+  // AI instructions section open state
+  const [aiSectionOpen, setAiSectionOpen] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -135,7 +153,6 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
       if (error) throw error;
       setInstructionsSaved(true);
       
-      // Hide the saved indicator after 2 seconds
       setTimeout(() => setInstructionsSaved(false), 2000);
     } catch (error) {
       toast({
@@ -152,18 +169,15 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     setAiInstructions(value);
     setInstructionsSaved(false);
     
-    // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     
-    // Set new timeout for auto-save (1 second debounce)
     saveTimeoutRef.current = setTimeout(() => {
       saveInstructions(value);
     }, 1000);
   };
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
@@ -307,125 +321,133 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     }
   };
 
-  const handleSaveNote = async () => {
-    if (!noteTitle.trim() || !noteContent.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a title and content',
-        variant: 'destructive',
+  const saveNote = async (title: string, content: string) => {
+    const { data: doc, error } = await supabase
+      .from('documents')
+      .insert({
+        space_id: spaceId,
+        filename: title.trim(),
+        content_text: content.trim(),
+        file_type: 'note',
+        status: 'ready' as DocumentStatus,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Create chunks for the content
+    const chunkSize = 1000;
+    for (let i = 0; i < content.length; i += chunkSize) {
+      await supabase.from('document_chunks').insert({
+        document_id: doc.id,
+        content: content.slice(i, i + chunkSize),
+        chunk_index: Math.floor(i / chunkSize),
       });
+    }
+
+    return doc;
+  };
+
+  const handlePasteSubmit = async () => {
+    if (!pasteTitle.trim() || !pasteContent.trim()) {
+      toast({ title: 'Error', description: 'Please enter a title and content', variant: 'destructive' });
       return;
     }
 
-    setSavingNote(true);
+    setSavingPaste(true);
     try {
-      const { data: doc, error } = await supabase
-        .from('documents')
-        .insert({
-          space_id: spaceId,
-          filename: noteTitle.trim(),
-          content_text: noteContent.trim(),
-          file_type: 'note',
-          status: 'ready' as DocumentStatus,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Create chunks for the content
-      const chunkSize = 1000;
-      const chunks = [];
-      for (let i = 0; i < noteContent.length; i += chunkSize) {
-        chunks.push(noteContent.slice(i, i + chunkSize));
-      }
-
-      for (let i = 0; i < chunks.length; i++) {
-        await supabase.from('document_chunks').insert({
-          document_id: doc.id,
-          content: chunks[i],
-          chunk_index: i,
-        });
-      }
-
+      const doc = await saveNote(pasteTitle, pasteContent);
       setDocuments(prev => [doc, ...prev]);
-      setNoteTitle('');
-      setNoteContent('');
-      setNoteDialogOpen(false);
-
-      toast({
-        title: 'Note added',
-        description: `"${doc.filename}" has been added to your knowledge base`,
-      });
+      setPasteTitle('');
+      setPasteContent('');
+      toast({ title: 'Content added', description: `"${doc.filename}" has been added` });
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to save note',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to save content', variant: 'destructive' });
     } finally {
-      setSavingNote(false);
+      setSavingPaste(false);
     }
   };
 
-  const handleQuickAdd = async () => {
-    if (!quickAddTitle.trim() || !quickAddContent.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a title and content',
-        variant: 'destructive',
-      });
+  const handleTypeSubmit = async () => {
+    if (!typeTitle.trim() || !typeContent.trim()) {
+      toast({ title: 'Error', description: 'Please enter a title and content', variant: 'destructive' });
       return;
     }
 
-    setSavingQuickAdd(true);
+    setSavingType(true);
     try {
-      const { data: doc, error } = await supabase
+      const doc = await saveNote(typeTitle, typeContent);
+      setDocuments(prev => [doc, ...prev]);
+      setTypeTitle('');
+      setTypeContent('');
+      toast({ title: 'Info added', description: `"${doc.filename}" has been added` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save info', variant: 'destructive' });
+    } finally {
+      setSavingType(false);
+    }
+  };
+
+  const handleVoiceSubmit = async () => {
+    if (!voiceTitle.trim() || !voiceTranscript.trim()) {
+      toast({ title: 'Error', description: 'Please add a title and record audio', variant: 'destructive' });
+      return;
+    }
+
+    setSavingVoice(true);
+    try {
+      const doc = await saveNote(voiceTitle, voiceTranscript);
+      setDocuments(prev => [doc, ...prev]);
+      setVoiceTitle('');
+      setVoiceTranscript('');
+      toast({ title: 'Voice note added', description: `"${doc.filename}" has been added` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save voice note', variant: 'destructive' });
+    } finally {
+      setSavingVoice(false);
+    }
+  };
+
+  const handleEditDocument = async () => {
+    if (!selectedDoc || !editTitle.trim()) return;
+    
+    setSavingEdit(true);
+    try {
+      const updates: { filename: string; content_text?: string } = { filename: editTitle.trim() };
+      if (selectedDoc.file_type === 'note') {
+        updates.content_text = editContent.trim();
+        
+        // Update chunks
+        await supabase.from('document_chunks').delete().eq('document_id', selectedDoc.id);
+        const chunkSize = 1000;
+        for (let i = 0; i < editContent.length; i += chunkSize) {
+          await supabase.from('document_chunks').insert({
+            document_id: selectedDoc.id,
+            content: editContent.slice(i, i + chunkSize),
+            chunk_index: Math.floor(i / chunkSize),
+          });
+        }
+      }
+      
+      const { error } = await supabase
         .from('documents')
-        .insert({
-          space_id: spaceId,
-          filename: quickAddTitle.trim(),
-          content_text: quickAddContent.trim(),
-          file_type: 'note',
-          status: 'ready' as DocumentStatus,
-        })
-        .select()
-        .single();
+        .update(updates)
+        .eq('id', selectedDoc.id);
 
       if (error) throw error;
 
-      // Create chunks for the content
-      const chunkSize = 1000;
-      const chunks = [];
-      for (let i = 0; i < quickAddContent.length; i += chunkSize) {
-        chunks.push(quickAddContent.slice(i, i + chunkSize));
-      }
-
-      for (let i = 0; i < chunks.length; i++) {
-        await supabase.from('document_chunks').insert({
-          document_id: doc.id,
-          content: chunks[i],
-          chunk_index: i,
-        });
-      }
-
-      setDocuments(prev => [doc, ...prev]);
-      setQuickAddTitle('');
-      setQuickAddContent('');
-      setQuickAddOpen(false);
-
-      toast({
-        title: 'Info added',
-        description: `"${doc.filename}" has been added to your knowledge base`,
-      });
+      setDocuments(prev => prev.map(d => 
+        d.id === selectedDoc.id 
+          ? { ...d, filename: editTitle.trim(), content_text: editContent.trim() || d.content_text }
+          : d
+      ));
+      setEditDocDialog(false);
+      toast({ title: 'Document updated' });
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to save info',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to update document', variant: 'destructive' });
     } finally {
-      setSavingQuickAdd(false);
+      setSavingEdit(false);
     }
   };
 
@@ -443,14 +465,10 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
   const getStatusText = (status: DocumentStatus) => {
     switch (status) {
-      case 'ready':
-        return 'Ready';
-      case 'failed':
-        return 'Failed';
-      case 'indexing':
-        return 'Indexing...';
-      case 'uploading':
-        return 'Uploading...';
+      case 'ready': return 'Ready';
+      case 'failed': return 'Failed';
+      case 'indexing': return 'Indexing...';
+      case 'uploading': return 'Uploading...';
     }
   };
 
@@ -476,16 +494,9 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
       if (error) throw error;
 
       setExistingLinkToken(data.token);
-      toast({
-        title: 'Chat link created!',
-        description: 'Your shareable chat link is ready',
-      });
+      toast({ title: 'Chat link created!', description: 'Your shareable chat link is ready' });
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to create chat link',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to create chat link', variant: 'destructive' });
     } finally {
       setCreatingLink(false);
     }
@@ -494,10 +505,7 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const copyLink = (token: string) => {
     const url = `${window.location.origin}/chat/${token}`;
     navigator.clipboard.writeText(url);
-    toast({
-      title: 'Link copied!',
-      description: 'Chat link copied to clipboard',
-    });
+    toast({ title: 'Link copied!', description: 'Chat link copied to clipboard' });
   };
 
   const openLink = (token: string) => {
@@ -514,56 +522,8 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
 
   return (
     <div className="space-y-6">
-      {/* Actions Row */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
-            multiple
-            className="hidden"
-            onChange={handleFileUpload}
-          />
-          <Button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="gradient-primary text-primary-foreground"
-          >
-            {uploading ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : (
-              <Upload className="w-4 h-4 mr-2" />
-            )}
-            Upload Files
-          </Button>
-          
-          <Button 
-            variant="outline"
-            onClick={() => setNoteDialogOpen(true)}
-          >
-            <ClipboardPaste className="w-4 h-4 mr-2" />
-            Paste Content
-          </Button>
-          
-          <Button 
-            variant="outline"
-            onClick={() => setQuickAddOpen(true)}
-          >
-            <PenLine className="w-4 h-4 mr-2" />
-            Quick Add Info
-          </Button>
-          
-          <Button 
-            variant="outline"
-            onClick={() => setVoiceDialogOpen(true)}
-          >
-            <Mic className="w-4 h-4 mr-2" />
-            Voice Note
-          </Button>
-        </div>
-
-        {/* Chat Link Button */}
+      {/* Chat Link Section */}
+      <div className="flex items-center justify-end">
         {loadingLink ? (
           <div className="flex items-center gap-2 px-3 py-2">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -572,381 +532,340 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
           <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-3 py-2">
             <Link className="w-4 h-4 text-success" />
             <span className="text-sm font-medium text-success">Chat Link</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2"
-              onClick={() => copyLink(existingLinkToken)}
-            >
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copyLink(existingLinkToken)}>
               <Copy className="w-3.5 h-3.5" />
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2"
-              onClick={() => setQrDialogOpen(true)}
-              title="Show QR Code"
-            >
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setQrDialogOpen(true)} title="Show QR Code">
               <QrCode className="w-3.5 h-3.5" />
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2"
-              onClick={() => openLink(existingLinkToken)}
-            >
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => openLink(existingLinkToken)}>
               <ExternalLink className="w-3.5 h-3.5" />
             </Button>
           </div>
         ) : (
-          <Button
-            onClick={handleCreateChatLink}
-            disabled={creatingLink}
-            className="bg-success hover:bg-success/90 text-success-foreground"
-          >
-            {creatingLink ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : (
-              <Link className="w-4 h-4 mr-2" />
-            )}
+          <Button onClick={handleCreateChatLink} disabled={creatingLink} className="bg-success hover:bg-success/90 text-success-foreground">
+            {creatingLink ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link className="w-4 h-4 mr-2" />}
             Create Chat Link
           </Button>
         )}
       </div>
 
-      {/* Note Dialog */}
-      <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <ClipboardPaste className="w-5 h-5" />
-              Add Note
-            </DialogTitle>
-            <DialogDescription>
-              Paste or type content to add to your knowledge base
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="note-title">Title</Label>
-              <Input
-                id="note-title"
-                placeholder="e.g., Company FAQ"
-                value={noteTitle}
-                onChange={(e) => setNoteTitle(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="note-content">Content</Label>
-              <Textarea
-                id="note-content"
-                placeholder="Paste or type your content here..."
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                rows={10}
-                className="resize-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNoteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSaveNote} 
-                disabled={savingNote || !noteTitle.trim() || !noteContent.trim()}
-                className="gradient-primary text-primary-foreground"
-              >
-                {savingNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Save Note
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Quick Add Dialog */}
-      <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <PenLine className="w-5 h-5" />
-              Quick Add Info
-            </DialogTitle>
-            <DialogDescription>
-              Type or paste information to add to your knowledge base
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="quick-title">Title</Label>
-              <Input
-                id="quick-title"
-                placeholder="e.g., Contact Info, About Us"
-                value={quickAddTitle}
-                onChange={(e) => setQuickAddTitle(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-content">Information</Label>
-              <Textarea
-                id="quick-content"
-                placeholder="Type your information here..."
-                value={quickAddContent}
-                onChange={(e) => setQuickAddContent(e.target.value)}
-                rows={8}
-                className="resize-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setQuickAddOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleQuickAdd} 
-                disabled={savingQuickAdd || !quickAddTitle.trim() || !quickAddContent.trim()}
-                className="gradient-primary text-primary-foreground"
-              >
-                {savingQuickAdd && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Add Info
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Voice Note Dialog */}
-      <Dialog open={voiceDialogOpen} onOpenChange={(open) => {
-        setVoiceDialogOpen(open);
-        if (!open) {
-          setVoiceNoteTitle('');
-          setVoiceTranscript('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <Mic className="w-5 h-5" />
-              Voice Note
-            </DialogTitle>
-            <DialogDescription>
-              Record your voice and we'll transcribe it to text
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="voice-title">Title</Label>
-              <Input
-                id="voice-title"
-                placeholder="e.g., Meeting Notes, Ideas"
-                value={voiceNoteTitle}
-                onChange={(e) => setVoiceNoteTitle(e.target.value)}
-              />
-            </div>
-            
-            {/* Recording Controls */}
-            <div className="flex flex-col items-center gap-4 py-6">
-              <button
-                onClick={toggleRecording}
-                disabled={isProcessing}
-                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-                  isRecording 
-                    ? 'bg-destructive text-destructive-foreground animate-pulse' 
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-8 h-8 animate-spin" />
-                ) : isRecording ? (
-                  <MicOff className="w-8 h-8" />
-                ) : (
-                  <Mic className="w-8 h-8" />
-                )}
-              </button>
-              <p className="text-sm text-muted-foreground">
-                {isProcessing ? 'Transcribing...' : isRecording ? 'Recording... Click to stop' : 'Click to start recording'}
-              </p>
-            </div>
-            
-            {/* Transcript */}
-            <div className="space-y-2">
-              <Label htmlFor="voice-transcript">Transcript</Label>
-              <Textarea
-                id="voice-transcript"
-                placeholder="Your transcribed text will appear here..."
-                value={voiceTranscript}
-                onChange={(e) => setVoiceTranscript(e.target.value)}
-                rows={6}
-                className="resize-none"
-              />
-            </div>
-            
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setVoiceDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={async () => {
-                  if (!voiceNoteTitle.trim() || !voiceTranscript.trim()) {
-                    toast({
-                      title: 'Error',
-                      description: 'Please add a title and record some audio',
-                      variant: 'destructive',
-                    });
-                    return;
-                  }
-                  
-                  setSavingVoiceNote(true);
-                  try {
-                    const { data: doc, error } = await supabase
-                      .from('documents')
-                      .insert({
-                        space_id: spaceId,
-                        filename: voiceNoteTitle.trim(),
-                        content_text: voiceTranscript.trim(),
-                        file_type: 'note',
-                        status: 'ready' as DocumentStatus,
-                      })
-                      .select()
-                      .single();
-
-                    if (error) throw error;
-
-                    // Create chunks
-                    const chunkSize = 1000;
-                    for (let i = 0; i < voiceTranscript.length; i += chunkSize) {
-                      await supabase.from('document_chunks').insert({
-                        document_id: doc.id,
-                        content: voiceTranscript.slice(i, i + chunkSize),
-                        chunk_index: Math.floor(i / chunkSize),
-                      });
-                    }
-
-                    setDocuments(prev => [doc, ...prev]);
-                    setVoiceNoteTitle('');
-                    setVoiceTranscript('');
-                    setVoiceDialogOpen(false);
-
-                    toast({
-                      title: 'Voice note added',
-                      description: `"${doc.filename}" has been added to your knowledge base`,
-                    });
-                  } catch (error) {
-                    toast({
-                      title: 'Error',
-                      description: 'Failed to save voice note',
-                      variant: 'destructive',
-                    });
-                  } finally {
-                    setSavingVoiceNote(false);
-                  }
-                }} 
-                disabled={savingVoiceNote || !voiceNoteTitle.trim() || !voiceTranscript.trim()}
-                className="gradient-primary text-primary-foreground"
-              >
-                {savingVoiceNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Save Voice Note
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* AI Instructions */}
+      {/* Add Content Section with Tabs */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-display flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
-            AI Instructions
-          </CardTitle>
-          <CardDescription>
-            Tell the AI what to say and what not to say when answering questions
-          </CardDescription>
+          <CardTitle className="text-base font-display">Add Knowledge</CardTitle>
+          <CardDescription>Choose how you want to add information to your knowledge base</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Textarea
-            placeholder="e.g., Only answer questions about our products. Don't discuss competitors. Always be friendly and professional. If unsure, say 'I don't know'..."
-            value={aiInstructions}
-            onChange={(e) => handleInstructionsChange(e.target.value)}
-            rows={4}
-            className="resize-none"
-          />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
-            {savingInstructions && (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Saving...</span>
-              </>
-            )}
-            {instructionsSaved && !savingInstructions && (
-              <>
-                <CheckCircle className="w-3 h-3 text-green-500" />
-                <span className="text-green-600">Saved</span>
-              </>
-            )}
-          </div>
+        <CardContent>
+          <Tabs value={activeInputTab} onValueChange={setActiveInputTab}>
+            <TabsList className="grid w-full grid-cols-4 mb-4">
+              <TabsTrigger value="upload" className="text-xs sm:text-sm">
+                <Upload className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Upload</span>
+              </TabsTrigger>
+              <TabsTrigger value="paste" className="text-xs sm:text-sm">
+                <ClipboardPaste className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Paste</span>
+              </TabsTrigger>
+              <TabsTrigger value="type" className="text-xs sm:text-sm">
+                <PenLine className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Type</span>
+              </TabsTrigger>
+              <TabsTrigger value="voice" className="text-xs sm:text-sm">
+                <Mic className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Voice</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Upload Tab */}
+            <TabsContent value="upload" className="mt-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <div 
+                className="border-2 border-dashed border-border/50 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                <p className="font-medium mb-1">Click to upload files</p>
+                <p className="text-sm text-muted-foreground">PDF, TXT, PNG, JPG, WEBP, GIF</p>
+                {uploading && (
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Uploading...</span>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Paste Tab */}
+            <TabsContent value="paste" className="mt-0 space-y-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input placeholder="e.g., Company FAQ" value={pasteTitle} onChange={(e) => setPasteTitle(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Paste your content</Label>
+                <Textarea placeholder="Paste text content here..." value={pasteContent} onChange={(e) => setPasteContent(e.target.value)} rows={6} />
+              </div>
+              <Button onClick={handlePasteSubmit} disabled={savingPaste || !pasteTitle.trim() || !pasteContent.trim()} className="w-full gradient-primary text-primary-foreground">
+                {savingPaste && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Add Content
+              </Button>
+            </TabsContent>
+
+            {/* Type Tab */}
+            <TabsContent value="type" className="mt-0 space-y-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input placeholder="e.g., Contact Info, About Us" value={typeTitle} onChange={(e) => setTypeTitle(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Information</Label>
+                <Textarea placeholder="Type your information here..." value={typeContent} onChange={(e) => setTypeContent(e.target.value)} rows={6} />
+              </div>
+              <Button onClick={handleTypeSubmit} disabled={savingType || !typeTitle.trim() || !typeContent.trim()} className="w-full gradient-primary text-primary-foreground">
+                {savingType && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Add Info
+              </Button>
+            </TabsContent>
+
+            {/* Voice Tab */}
+            <TabsContent value="voice" className="mt-0 space-y-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input placeholder="e.g., Meeting Notes" value={voiceTitle} onChange={(e) => setVoiceTitle(e.target.value)} />
+              </div>
+              <div className="flex flex-col items-center gap-4 py-6">
+                <button
+                  onClick={toggleRecording}
+                  disabled={isProcessing}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                    isRecording 
+                      ? 'bg-destructive text-destructive-foreground animate-pulse' 
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : isRecording ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                </button>
+                <p className="text-sm text-muted-foreground">
+                  {isProcessing ? 'Transcribing...' : isRecording ? 'Recording... Click to stop' : 'Click to record'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Transcript</Label>
+                <Textarea placeholder="Transcribed text will appear here..." value={voiceTranscript} onChange={(e) => setVoiceTranscript(e.target.value)} rows={4} />
+              </div>
+              <Button onClick={handleVoiceSubmit} disabled={savingVoice || !voiceTitle.trim() || !voiceTranscript.trim()} className="w-full gradient-primary text-primary-foreground">
+                {savingVoice && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Save Voice Note
+              </Button>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
-      {/* Documents list */}
-      {documents.length === 0 ? (
-        <Card className="border-dashed border-2 border-border/50 bg-card/50">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-              <Sparkles className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-            <p className="text-muted-foreground text-center max-w-sm mb-6">
-              Upload PDFs, images, TXT files, or add notes to build your knowledge base
-            </p>
-          </CardContent>
+      {/* AI Instructions (Collapsible) */}
+      <Collapsible open={aiSectionOpen} onOpenChange={setAiSectionOpen}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-base font-display">AI Fallback Response</CardTitle>
+                </div>
+                {aiSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+              <CardDescription className="text-left">
+                What should the AI say when it doesn't find an answer in your documents?
+              </CardDescription>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-3 pt-0">
+              <Textarea
+                placeholder="e.g., I'm sorry, I don't have information about that. Please contact us at support@company.com for more help."
+                value={aiInstructions}
+                onChange={(e) => handleInstructionsChange(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
+                {savingInstructions && (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                )}
+                {instructionsSaved && !savingInstructions && (
+                  <>
+                    <CheckCircle className="w-3 h-3 text-green-500" />
+                    <span className="text-green-600">Saved</span>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </CollapsibleContent>
         </Card>
-      ) : (
-        <div className="space-y-3">
-          {documents.map((doc, index) => (
-            <Card 
-              key={doc.id} 
-              className="animate-fade-in hover:border-primary/30 transition-colors"
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                  doc.file_type === 'note' 
-                    ? 'bg-warning/20 text-warning' 
-                    : doc.file_type === 'image'
-                    ? 'bg-accent/20 text-accent-foreground'
-                    : 'bg-primary/20 text-primary'
-                }`}>
-                  {getFileIcon(doc.file_type)}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{doc.filename}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {getStatusIcon(doc.status)}
-                    <span className="text-sm text-muted-foreground">
-                      {getStatusText(doc.status)}
-                    </span>
-                    {doc.error_message && (
-                      <span className="text-sm text-destructive truncate">
-                        - {doc.error_message}
-                      </span>
-                    )}
-                  </div>
-                </div>
+      </Collapsible>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteDocument(doc)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {/* Documents List */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-display font-semibold flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Your Documents ({documents.length})
+        </h3>
+        
+        {documents.length === 0 ? (
+          <Card className="border-dashed border-2 border-border/50 bg-card/50">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                <Sparkles className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
+              <p className="text-muted-foreground text-center max-w-sm">
+                Use the tabs above to add your first document
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {documents.map((doc, index) => (
+              <Card 
+                key={doc.id} 
+                className="animate-fade-in hover:border-primary/30 transition-colors"
+                style={{ animationDelay: `${index * 30}ms` }}
+              >
+                <CardContent className="flex items-center gap-3 p-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    doc.file_type === 'note' 
+                      ? 'bg-warning/20 text-warning' 
+                      : doc.file_type === 'image'
+                      ? 'bg-accent/20 text-accent-foreground'
+                      : 'bg-primary/20 text-primary'
+                  }`}>
+                    {getFileIcon(doc.file_type)}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-sm">{doc.filename}</p>
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(doc.status)}
+                      <span className="text-xs text-muted-foreground">{getStatusText(doc.status)}</span>
+                      {doc.error_message && (
+                        <span className="text-xs text-destructive truncate">- {doc.error_message}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* View button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setSelectedDoc(doc);
+                        setViewDocDialog(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    
+                    {/* Edit button (only for notes) */}
+                    {doc.file_type === 'note' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setSelectedDoc(doc);
+                          setEditTitle(doc.filename);
+                          setEditContent(doc.content_text || '');
+                          setEditDocDialog(true);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                    
+                    {/* Delete button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteDocument(doc)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* View Document Dialog */}
+      <Dialog open={viewDocDialog} onOpenChange={setViewDocDialog}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              {selectedDoc && getFileIcon(selectedDoc.file_type)}
+              {selectedDoc?.filename}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDoc?.file_type === 'note' ? 'Text content' : `${selectedDoc?.file_type.toUpperCase()} file`}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[50vh]">
+            {selectedDoc?.content_text ? (
+              <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm">
+                {selectedDoc.content_text}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No preview available for this file type
+              </p>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Document Dialog */}
+      <Dialog open={editDocDialog} onOpenChange={setEditDocDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Edit Document
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Content</Label>
+              <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditDocDialog(false)}>Cancel</Button>
+              <Button onClick={handleEditDocument} disabled={savingEdit} className="gradient-primary text-primary-foreground">
+                {savingEdit && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Dialog */}
       {existingLinkToken && (

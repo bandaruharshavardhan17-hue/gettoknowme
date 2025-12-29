@@ -628,11 +628,29 @@ The space detail page now has **3 tabs** (Links tab removed for simplicity):
 
 | Tab | Component | Purpose |
 |-----|-----------|---------|
-| **Documents** | `SpaceDocumentsTab` | Upload files, add notes, voice notes, manage single chat link |
+| **Documents** | `SpaceDocumentsTab` | Add knowledge, AI fallback, manage documents |
 | **History** | `SpaceChatHistoryTab` | View conversation history |
 | **Analytics** | `SpaceAnalyticsTab` | View usage stats |
 
-**Key simplification**: Each space has ONE chat link, created/displayed directly in the Documents tab. No separate Links management needed.
+**Key simplification**: Each space has ONE chat link, created/displayed directly in the Documents tab.
+
+### SpaceDocumentsTab UI Structure
+
+The Documents tab uses a tabbed interface for adding content:
+
+| Input Tab | Purpose |
+|-----------|---------|
+| **Upload** | Drag/click to upload PDF, TXT, images |
+| **Paste** | Paste text content with title |
+| **Type** | Manually type information |
+| **Voice** | Record voice, auto-transcribe via Whisper |
+
+Additional sections:
+- **AI Fallback Response**: Collapsible section for setting what AI says when no answer found
+- **Documents List**: Shows all uploaded docs with View/Edit/Delete actions
+  - View: Opens dialog showing content preview
+  - Edit: (Notes only) Edit title and content
+  - Delete: Remove document from knowledge base
 
 ### Sharing Features
 
