@@ -12,11 +12,17 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  
+  // Store callbacks in refs to avoid dependency issues
+  const onTranscriptRef = useRef(onTranscript);
+  const onErrorRef = useRef(onError);
+  onTranscriptRef.current = onTranscript;
+  onErrorRef.current = onError;
 
   const processAudio = useCallback(async () => {
     if (chunksRef.current.length === 0) {
       console.log('No audio chunks to process');
-      onError?.('No audio recorded. Please try again.');
+      onErrorRef.current?.('No audio recorded. Please try again.');
       setIsProcessing(false);
       return;
     }
@@ -26,7 +32,7 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
     
     if (audioBlob.size < 1000) {
       console.log('Audio too short');
-      onError?.('Recording too short. Please speak for at least 1 second.');
+      onErrorRef.current?.('Recording too short. Please speak for at least 1 second.');
       setIsProcessing(false);
       return;
     }
@@ -50,15 +56,15 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
         console.log('Transcription response:', data);
         
         if (data.text && data.text.trim()) {
-          onTranscript(data.text.trim());
+          onTranscriptRef.current(data.text.trim());
         } else if (data.error) {
-          onError?.(data.error);
+          onErrorRef.current?.(data.error);
         } else {
-          onError?.('No speech detected. Please try again.');
+          onErrorRef.current?.('No speech detected. Please try again.');
         }
       } catch (err) {
         console.error('Transcription error:', err);
-        onError?.(err instanceof Error ? err.message : 'Failed to transcribe audio');
+        onErrorRef.current?.(err instanceof Error ? err.message : 'Failed to transcribe audio');
       } finally {
         setIsProcessing(false);
       }
@@ -66,12 +72,12 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
     
     reader.onerror = () => {
       console.error('FileReader error');
-      onError?.('Failed to process audio file');
+      onErrorRef.current?.('Failed to process audio file');
       setIsProcessing(false);
     };
     
     reader.readAsDataURL(audioBlob);
-  }, [onTranscript, onError]);
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
@@ -82,7 +88,6 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 16000,
         } 
       });
       
@@ -123,7 +128,7 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
       
       mediaRecorder.onerror = (event) => {
         console.error('MediaRecorder error:', event);
-        onError?.('Recording error occurred');
+        onErrorRef.current?.('Recording error occurred');
       };
       
       mediaRecorderRef.current = mediaRecorder;
@@ -133,9 +138,9 @@ export function useVoiceRecording({ onTranscript, onError }: UseVoiceRecordingOp
       console.log('Recording started');
     } catch (err) {
       console.error('Failed to start recording:', err);
-      onError?.('Failed to access microphone. Please allow microphone access.');
+      onErrorRef.current?.('Failed to access microphone. Please allow microphone access.');
     }
-  }, [processAudio, onError]);
+  }, [processAudio]);
 
   const stopRecording = useCallback(() => {
     console.log('Stopping recording...');
