@@ -812,35 +812,59 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <span className="ml-2 text-muted-foreground">Loading preview...</span>
               </div>
-            ) : selectedDoc?.content_text ? (
-              <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm">
-                {selectedDoc.content_text}
-              </div>
-            ) : selectedDoc?.file_type === 'image' && filePreviewUrl ? (
-              <div className="flex justify-center p-4">
-                <img 
-                  src={filePreviewUrl} 
-                  alt={selectedDoc.filename}
-                  className="max-w-full max-h-[50vh] object-contain rounded-lg border"
-                />
-              </div>
-            ) : selectedDoc?.file_type === 'pdf' && filePreviewUrl ? (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                  <FileText className="w-8 h-8 text-primary" />
-                </div>
-                <p className="text-muted-foreground mb-2">
-                  PDF preview blocked by browser security
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Click below to view or download the document
-                </p>
-              </div>
             ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">
-                  Preview not available
-                </p>
+              <div className="space-y-4">
+                {/* Show original image/PDF preview for uploaded files */}
+                {selectedDoc?.file_type === 'image' && filePreviewUrl && (
+                  <div className="flex justify-center p-4 bg-muted/30 rounded-lg">
+                    <img 
+                      src={filePreviewUrl} 
+                      alt={selectedDoc.filename}
+                      className="max-w-full max-h-[30vh] object-contain rounded-lg border"
+                    />
+                  </div>
+                )}
+                
+                {selectedDoc?.file_type === 'pdf' && filePreviewUrl && (
+                  <div className="text-center py-4 bg-muted/30 rounded-lg">
+                    <div className="w-12 h-12 mx-auto rounded-xl bg-primary/10 flex items-center justify-center mb-2">
+                      <FileText className="w-6 h-6 text-primary" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      PDF document - use buttons below to view
+                    </p>
+                  </div>
+                )}
+
+                {/* Show extracted text for all file types */}
+                {selectedDoc?.content_text ? (
+                  <div>
+                    {(selectedDoc.file_type === 'image' || selectedDoc.file_type === 'pdf') && (
+                      <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        Extracted Text (AI-indexed content):
+                      </p>
+                    )}
+                    <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm">
+                      {selectedDoc.content_text}
+                    </div>
+                  </div>
+                ) : selectedDoc?.file_type !== 'image' && selectedDoc?.file_type !== 'pdf' && (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      No content available
+                    </p>
+                  </div>
+                )}
+
+                {/* Show message if no extracted text for image/PDF */}
+                {!selectedDoc?.content_text && (selectedDoc?.file_type === 'image' || selectedDoc?.file_type === 'pdf') && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-center">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      No text was extracted from this file
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </ScrollArea>
