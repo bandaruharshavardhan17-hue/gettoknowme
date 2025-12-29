@@ -24,15 +24,48 @@ import {
 } from '@/components/ui/alert-dialog';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'error';
   content: string;
   citations?: string[];
+  errorType?: 'rate_limit' | 'service_unavailable' | 'no_documents' | 'network' | 'unknown';
 }
 
 interface SpaceInfo {
   name: string;
   description: string | null;
 }
+
+// User-friendly error messages with helpful suggestions
+const getErrorMessage = (status: number, errorBody?: string): { message: string; errorType: Message['errorType'] } => {
+  if (status === 429) {
+    return {
+      message: "You're sending messages too quickly. Please wait a moment before trying again.",
+      errorType: 'rate_limit'
+    };
+  }
+  if (status === 402) {
+    return {
+      message: "This service is temporarily unavailable. Please try again later.",
+      errorType: 'service_unavailable'
+    };
+  }
+  if (status === 400 && errorBody?.includes('No documents')) {
+    return {
+      message: "This knowledge base doesn't have any documents yet. The owner needs to upload content before questions can be answered.",
+      errorType: 'no_documents'
+    };
+  }
+  if (status >= 500) {
+    return {
+      message: "Something went wrong on our end. Please try again in a few moments.",
+      errorType: 'service_unavailable'
+    };
+  }
+  return {
+    message: "Unable to get a response. Please check your connection and try again.",
+    errorType: 'unknown'
+  };
+};
 
 export default function PublicChat() {
   const { token } = useParams<{ token: string }>();
@@ -131,13 +164,17 @@ export default function PublicChat() {
       });
 
       if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Too many requests. Please wait a moment.');
-        }
-        if (response.status === 402) {
-          throw new Error('Service temporarily unavailable.');
-        }
-        throw new Error('Failed to get response');
+        const errorBody = await response.text().catch(() => '');
+        const { message, errorType } = getErrorMessage(response.status, errorBody);
+        
+        // Add error as a message in the chat instead of just a toast
+        setMessages(prev => [...prev, { 
+          role: 'error', 
+          content: message,
+          errorType
+        }]);
+        setSending(false);
+        return;
       }
 
       // Stream the response
@@ -201,12 +238,15 @@ export default function PublicChat() {
         speak(assistantContent);
       }
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to send message',
-        variant: 'destructive',
-      });
-      setMessages(prev => prev.slice(0, -1)); // Remove the user message on error
+      // Network error - show inline in chat
+      const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
+      setMessages(prev => [...prev, { 
+        role: 'error', 
+        content: isNetworkError 
+          ? "Unable to connect. Please check your internet connection and try again."
+          : "Something went wrong. Please try sending your message again.",
+        errorType: isNetworkError ? 'network' : 'unknown'
+      }]);
     } finally {
       setSending(false);
     }
@@ -366,10 +406,14 @@ export default function PublicChat() {
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   message.role === 'user' 
                     ? 'bg-primary text-primary-foreground'
+                    : message.role === 'error'
+                    ? 'bg-destructive/20 text-destructive'
                     : 'gradient-primary text-primary-foreground'
                 }`}>
                   {message.role === 'user' ? (
                     <User className="w-4 h-4" />
+                  ) : message.role === 'error' ? (
+                    <AlertCircle className="w-4 h-4" />
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
@@ -381,44 +425,75 @@ export default function PublicChat() {
                   <Card className={`inline-block ${
                     message.role === 'user' 
                       ? 'bg-primary text-primary-foreground'
+                      : message.role === 'error'
+                      ? 'bg-destructive/10 border-destructive/30'
                       : 'bg-card'
                   }`}>
                     <CardContent className="p-3">
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                      
-                      {message.citations && message.citations.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-border/30">
-                          <p className="text-xs font-medium mb-2 opacity-70">Sources:</p>
-                          <div className="space-y-1">
-                            {message.citations.map((citation, i) => (
-                              <p key={i} className="text-xs opacity-60 italic">
-                                "{citation}"
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* TTS button for assistant messages */}
-                      {message.role === 'assistant' && message.content && (
-                        <div className="mt-2 pt-2 border-t border-border/20">
+                      {message.role === 'error' ? (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-destructive font-medium text-sm">
+                            {message.errorType === 'rate_limit' && '⏱️ Slow down'}
+                            {message.errorType === 'service_unavailable' && '🔧 Service issue'}
+                            {message.errorType === 'no_documents' && '📄 No content'}
+                            {message.errorType === 'network' && '📡 Connection issue'}
+                            {message.errorType === 'unknown' && '⚠️ Something went wrong'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{message.content}</p>
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => isPlaying ? stop() : speak(message.content)}
-                            disabled={ttsLoading}
-                            className="h-7 px-2 text-xs"
+                            onClick={() => {
+                              // Find the last user message and retry
+                              const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+                              if (lastUserMsg) {
+                                setInput(lastUserMsg.content);
+                              }
+                            }}
+                            className="self-start mt-1 h-7 text-xs"
                           >
-                            {ttsLoading ? (
-                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                            ) : isPlaying ? (
-                              <Square className="w-3 h-3 mr-1" />
-                            ) : (
-                              <Volume2 className="w-3 h-3 mr-1" />
-                            )}
-                            {isPlaying ? 'Stop' : 'Listen'}
+                            Try again
                           </Button>
                         </div>
+                      ) : (
+                        <>
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          
+                          {message.citations && message.citations.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-border/30">
+                              <p className="text-xs font-medium mb-2 opacity-70">Sources:</p>
+                              <div className="space-y-1">
+                                {message.citations.map((citation, i) => (
+                                  <p key={i} className="text-xs opacity-60 italic">
+                                    "{citation}"
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* TTS button for assistant messages */}
+                          {message.role === 'assistant' && message.content && (
+                            <div className="mt-2 pt-2 border-t border-border/20">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => isPlaying ? stop() : speak(message.content)}
+                                disabled={ttsLoading}
+                                className="h-7 px-2 text-xs"
+                              >
+                                {ttsLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                ) : isPlaying ? (
+                                  <Square className="w-3 h-3 mr-1" />
+                                ) : (
+                                  <Volume2 className="w-3 h-3 mr-1" />
+                                )}
+                                {isPlaying ? 'Stop' : 'Listen'}
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>
