@@ -384,9 +384,12 @@ Note: "Paste" and "Type" were consolidated into a single "Note" tab as they serv
 
 Each space has an "AI Settings" section that allows:
 - **Model Selection** - Choose from GPT-4o-mini (default), GPT-4o, GPT-4 Turbo, or GPT-3.5 Turbo
+- **Visual Save Confirmation** - Shows "Model saved" indicator when successfully updated
 - **Fallback Response** - Custom message when AI doesn't find an answer
 
 The selected model is stored in `spaces.ai_model` and used by `public-chat` edge function.
+
+**Implementation Note**: The component uses `initialModelLoadedRef` to prevent the AI model from resetting when the parent component re-renders (e.g., during voice recording state changes).
 
 ### Public Chat Features
 

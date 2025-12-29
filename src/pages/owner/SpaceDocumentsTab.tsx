@@ -75,6 +75,7 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   // AI model state - use ref to track if initial load is done
   const [selectedModel, setSelectedModel] = useState(aiModel || 'gpt-4o-mini');
   const [savingModel, setSavingModel] = useState(false);
+  const [modelSaved, setModelSaved] = useState(false);
   const initialModelLoadedRef = useRef(false);
   
   // Input tab state
@@ -170,6 +171,7 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   const handleModelChange = async (model: string) => {
     setSelectedModel(model);
     setSavingModel(true);
+    setModelSaved(false);
     try {
       const { error } = await supabase
         .from('spaces')
@@ -177,7 +179,11 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
         .eq('id', spaceId);
 
       if (error) throw error;
+      setModelSaved(true);
       toast({ title: 'AI model updated', description: `Using ${AI_MODELS.find(m => m.value === model)?.label}` });
+      
+      // Clear saved indicator after 2 seconds
+      setTimeout(() => setModelSaved(false), 2000);
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to update AI model', variant: 'destructive' });
       setSelectedModel(aiModel || 'gpt-4o-mini');
@@ -717,12 +723,20 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
                     ))}
                   </SelectContent>
                 </Select>
-                {savingModel && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Updating model...</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
+                  {savingModel && (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Updating model...</span>
+                    </>
+                  )}
+                  {modelSaved && !savingModel && (
+                    <>
+                      <CheckCircle className="w-3 h-3 text-green-500" />
+                      <span className="text-green-600">Model saved</span>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* AI Fallback Response */}
