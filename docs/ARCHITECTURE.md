@@ -2,6 +2,8 @@
 
 > **Purpose**: A knowledge-based Q&A app where owners upload documents, share links, and visitors ask questions answered by AI using only the uploaded content.
 
+> **For AI Developers**: This document provides complete context to understand, maintain, or build similar apps. It includes user flows, admin flows, database schema, API specifications, and AI integration details.
+
 > **Related Docs**: 
 > - [Developer Guide](./DEVELOPER.md) - Setup, patterns, and development workflow
 > - [API Documentation](./API.md) - API endpoints and usage
@@ -10,16 +12,487 @@
 ---
 
 ## Table of Contents
-1. [Overview](#overview)
-2. [Tech Stack](#tech-stack)
-3. [Code Organization](#code-organization)
-4. [Database Schema](#database-schema)
-5. [Edge Functions (APIs)](#edge-functions-apis)
-6. [AI Integration](#ai-integration)
-7. [Authentication Flow](#authentication-flow)
-8. [Code Flow](#code-flow)
-9. [Security Model](#security-model)
-10. [File Structure](#file-structure)
+1. [What This App Does](#what-this-app-does)
+2. [User Roles & Permissions](#user-roles--permissions)
+3. [Complete User Flows](#complete-user-flows)
+4. [End-to-End Flow Examples](#end-to-end-flow-examples)
+5. [Overview](#overview)
+6. [Tech Stack](#tech-stack)
+7. [Code Organization](#code-organization)
+8. [Database Schema](#database-schema)
+9. [Edge Functions (APIs)](#edge-functions-apis)
+10. [AI Integration](#ai-integration)
+11. [Authentication Flow](#authentication-flow)
+12. [Code Flow](#code-flow)
+13. [Security Model](#security-model)
+14. [File Structure](#file-structure)
+15. [Quick Reference: Building Similar Apps](#quick-reference-building-similar-apps)
+
+---
+
+## What This App Does
+
+### Problem Solved
+**Know Me** allows anyone to create an AI-powered knowledge assistant from their documents. Instead of sharing raw PDFs or text files, users share a chat link where visitors can ask questions and get AI-generated answers sourced **exclusively** from the uploaded content.
+
+### Key Use Cases
+
+| Use Case | Description |
+|----------|-------------|
+| **Personal Portfolio** | Upload resume, projects, bio → Share link → Recruiters can ask questions about your experience |
+| **Product Documentation** | Upload manuals, FAQs → Customers ask questions, get accurate answers |
+| **Educational Content** | Upload course materials → Students ask questions, AI tutors based on content |
+| **Company Knowledge Base** | Upload policies, procedures → Employees get instant answers |
+| **Interview Prep** | Upload your background → Practice answering questions about yourself |
+
+### Core Features
+
+1. **For Owners (Authenticated Users)**:
+   - Create "Spaces" (knowledge containers)
+   - Upload documents (PDF, TXT, images) or add typed notes
+   - Record voice notes (auto-transcribed)
+   - Generate shareable chat links with QR codes
+   - View conversation history and analytics
+   - Set custom AI fallback responses
+
+2. **For Visitors (Public Users)**:
+   - Access chat via shared link (no login required)
+   - Ask questions via text or voice
+   - Hear AI responses via text-to-speech
+   - Get answers grounded in uploaded documents only
+
+3. **For Admins**:
+   - View all users, spaces, and conversations
+   - Impersonate users for debugging
+   - Platform-wide analytics
+
+### The "No Hallucination" Guarantee
+The AI **only** answers using content from uploaded documents. If the answer isn't in the documents:
+- The AI responds with the owner's custom fallback message
+- OR says "I don't have that information in the provided documents"
+
+---
+
+## User Roles & Permissions
+
+### Role Definitions
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          USER ROLES                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌─────────────────┐                                                 │
+│  │     VISITOR     │  No authentication required                     │
+│  │    (Public)     │  Access: Public chat via share link only       │
+│  └─────────────────┘                                                 │
+│                                                                       │
+│  ┌─────────────────┐                                                 │
+│  │      OWNER      │  Email/password authentication                  │
+│  │  (Registered)   │  Access: Own spaces, documents, links, chats   │
+│  └─────────────────┘                                                 │
+│                                                                       │
+│  ┌─────────────────┐                                                 │
+│  │      ADMIN      │  Owner + admin role in user_roles table        │
+│  │   (Privileged)  │  Access: Everything + admin dashboard          │
+│  └─────────────────┘                                                 │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Permission Matrix
+
+| Action | Visitor | Owner | Admin |
+|--------|---------|-------|-------|
+| Access public chat | ✅ (with token) | ✅ | ✅ |
+| Create account | ✅ | N/A | N/A |
+| Create spaces | ❌ | ✅ | ✅ |
+| Upload documents | ❌ | ✅ (own spaces) | ✅ (own spaces) |
+| View own spaces | ❌ | ✅ | ✅ |
+| View all spaces | ❌ | ❌ | ✅ |
+| View all users | ❌ | ❌ | ✅ |
+| View all chats | ❌ | ❌ | ✅ |
+| Impersonate user | ❌ | ❌ | ✅ |
+| Assign admin role | ❌ | ❌ | ✅ |
+
+---
+
+## Complete User Flows
+
+### Flow 1: Owner Signup & Onboarding
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     OWNER SIGNUP FLOW                             │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Visit App
+  └─► User visits /login
+      ├─ Sees login/signup form
+      └─ Clicks "Sign Up" tab
+
+Step 2: Create Account
+  └─► Enters display name, email, password
+      ├─ Frontend calls supabase.auth.signUp()
+      ├─ Supabase creates auth.users record
+      ├─ Trigger: handle_new_user() fires
+      └─ Creates profile with display_name, email
+
+Step 3: Auto-Login
+  └─► AuthContext detects session
+      ├─ Redirects to /owner/spaces
+      └─ Shows onboarding tutorial (if first time)
+
+Step 4: Complete Tutorial
+  └─► User sees step-by-step guide
+      ├─ Step 1: "Create your first Space"
+      ├─ Step 2: "Upload documents or notes"
+      ├─ Step 3: "Share your chat link"
+      └─ Marks tutorial_completed = true
+
+DATABASE CHANGES:
+  - INSERT INTO auth.users (email, password_hash, ...)
+  - INSERT INTO profiles (id, email, display_name)
+  - UPDATE profiles SET tutorial_completed = true
+```
+
+### Flow 2: Owner Creates Space & Uploads Content
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              OWNER CONTENT CREATION FLOW                          │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Create New Space
+  └─► Owner clicks "Create Space" button
+      ├─ Dialog opens for name/description
+      ├─ Submits: supabase.from('spaces').insert()
+      ├─ Trigger: create_default_share_link() fires
+      └─ Auto-creates share_link with random token
+
+Step 2: Navigate to Space Detail
+  └─► Owner clicks on space card
+      ├─ Navigates to /owner/spaces/:id
+      └─ Shows 3 tabs: Documents, History, Analytics
+
+Step 3: Add Content (4 options)
+  
+  Option A: Upload File (PDF/TXT/Image)
+    └─► Owner drags file or clicks upload
+        ├─ File uploaded to storage.documents bucket
+        ├─ INSERT INTO documents (status: 'uploading')
+        ├─ Calls process-document edge function
+        │   ├─ Creates OpenAI vector store (if first doc)
+        │   ├─ Extracts text (or OCR for images)
+        │   ├─ Uploads to OpenAI vector store
+        │   └─ Updates document status to 'ready'
+        └─ Document appears in list
+
+  Option B: Paste Content
+    └─► Owner pastes text, adds title
+        ├─ INSERT INTO documents (file_type: 'note')
+        ├─ Creates document_chunks for search
+        └─ Calls process-document for vectorization
+
+  Option C: Type Content
+    └─► Owner types in text editor, adds title
+        ├─ Same as paste flow
+        └─ Good for structured notes
+
+  Option D: Voice Note
+    └─► Owner clicks record, speaks
+        ├─ Audio sent to voice-to-text function
+        ├─ Whisper transcribes to text
+        ├─ Creates document with transcription
+        └─ Processes like typed content
+
+Step 4: Configure AI Fallback
+  └─► Owner expands "AI Fallback Response" section
+      ├─ Types custom message (stored in spaces.description)
+      └─ AI uses this when no document answer found
+
+DATABASE CHANGES:
+  - INSERT INTO spaces (owner_id, name, description)
+  - INSERT INTO share_links (space_id, token)
+  - INSERT INTO documents (space_id, filename, content_text, status)
+  - INSERT INTO document_chunks (document_id, content, embedding)
+  - UPDATE spaces SET openai_vector_store_id = 'vs_xxx'
+  - UPDATE documents SET status = 'ready', openai_file_id = 'file_xxx'
+```
+
+### Flow 3: Owner Shares Space
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    OWNER SHARING FLOW                             │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: View Share Link
+  └─► In Documents tab, owner sees "Share Link" section
+      ├─ Shows full URL: https://app.com/chat/{token}
+      └─ Copy, QR, and Share buttons available
+
+Step 2: Copy Link
+  └─► Owner clicks "Copy Link"
+      ├─ Copies URL to clipboard
+      └─ Shows toast: "Link copied!"
+
+Step 3: Show QR Code
+  └─► Owner clicks "QR Code" button
+      ├─ QRCodeDialog opens
+      ├─ Shows scannable QR code
+      ├─ Options: Download PNG, Share
+      └─ Great for printed materials, presentations
+
+Step 4: Native Share
+  └─► Owner clicks "Share" button
+      ├─ On mobile: Opens native share sheet
+      ├─ On desktop: Copies link (fallback)
+      └─ Can share via SMS, WhatsApp, email, etc.
+
+NO DATABASE CHANGES (link already exists)
+```
+
+### Flow 4: Visitor Uses Public Chat
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                   VISITOR CHAT FLOW                               │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Access Chat Link
+  └─► Visitor opens /chat/{token}
+      ├─ PublicChat component loads
+      ├─ Extracts token from URL
+      └─ Calls public-chat (action: 'validate')
+
+Step 2: Validate Token
+  └─► Edge function validates token
+      ├─ Checks share_links for valid, non-revoked token
+      ├─ Updates: view_count++, last_used_at = now()
+      ├─ Returns space name and description
+      └─ Chat interface loads
+
+Step 3: Ask Question (Text)
+  └─► Visitor types question, clicks send
+      ├─ Message added to local state
+      ├─ Calls public-chat (action: 'chat')
+      │   ├─ Searches OpenAI vector store
+      │   ├─ Fetches document_chunks via match_document_chunks()
+      │   ├─ Builds system prompt with document context
+      │   ├─ Calls GPT-4o-mini with streaming
+      │   └─ Returns SSE stream
+      ├─ AI response streams character by character
+      └─ Both messages saved to chat_messages
+
+Step 4: Ask Question (Voice)
+  └─► Visitor clicks microphone, speaks
+      ├─ Audio recorded via MediaRecorder API
+      ├─ Sent to voice-to-text edge function
+      ├─ Whisper transcribes to text
+      ├─ Transcribed text sent as chat message
+      └─ Same chat flow as Step 3
+
+Step 5: Listen to Response
+  └─► Visitor clicks "Listen" on AI message
+      ├─ Calls text-to-speech edge function
+      ├─ OpenAI TTS generates audio
+      ├─ Audio plays in browser
+      └─ Can toggle auto-read for future messages
+
+Step 6: Continue Conversation
+  └─► Visitor asks follow-up questions
+      ├─ Previous messages included as 'history'
+      ├─ AI maintains conversation context
+      └─ Can reference earlier in conversation
+
+DATABASE CHANGES:
+  - UPDATE share_links SET view_count = view_count + 1, last_used_at = now()
+  - INSERT INTO chat_messages (role: 'user', content: question)
+  - INSERT INTO chat_messages (role: 'assistant', content: answer)
+```
+
+### Flow 5: Owner Views Analytics
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                   OWNER ANALYTICS FLOW                            │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Navigate to Analytics
+  └─► In Space Detail, click "Analytics" tab
+      OR click "Analytics" in sidebar
+      ├─ Overall dashboard shows all spaces
+      └─ Space-specific view shows single space
+
+Step 2: View Metrics
+  └─► Dashboard displays:
+      ├─ Total views (sum of all share_links.view_count)
+      ├─ Active links (count of non-revoked links)
+      ├─ Total conversations (count of unique chat sessions)
+      ├─ Messages exchanged (count of chat_messages)
+      └─ Last activity (max of last_used_at)
+
+Step 3: View Conversation History
+  └─► Click "History" tab in Space Detail
+      ├─ Lists all conversations (grouped by share_link)
+      ├─ Shows message preview, timestamp
+      └─ Can expand to see full conversation
+
+DATABASE QUERIES:
+  - SELECT COUNT(*) FROM share_links WHERE space_id = ?
+  - SELECT SUM(view_count) FROM share_links WHERE space_id = ?
+  - SELECT * FROM chat_messages WHERE space_id = ? ORDER BY created_at
+```
+
+### Flow 6: Admin Dashboard
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     ADMIN FLOW                                    │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Access Admin Dashboard
+  └─► Admin navigates to /admin
+      ├─ AdminRoute checks has_role(uid, 'admin')
+      ├─ If not admin: redirect to /owner/spaces
+      └─ Shows 3 tabs: Users, Spaces, Chats
+
+Step 2: View All Users
+  └─► "Users" tab selected
+      ├─ Queries profiles table (RLS allows admin)
+      ├─ Shows: display_name, email, join date
+      ├─ Shows activity counts: spaces, docs, links
+      └─ "View As" button for each user
+
+Step 3: Impersonate User
+  └─► Admin clicks "View As" on user row
+      ├─ ImpersonationContext stores target user ID
+      ├─ Navigates to /owner/spaces
+      ├─ All queries now filtered by impersonated user
+      ├─ Banner shows: "Viewing as {user} - Exit"
+      └─ Click "Exit" to stop impersonation
+
+Step 4: View All Spaces
+  └─► "Spaces" tab selected
+      ├─ Queries all spaces (admin RLS policy)
+      ├─ Shows: space name, owner, document count
+      └─ Can navigate to space details
+
+Step 5: View All Chats
+  └─► "Chats" tab selected
+      ├─ Queries all chat_messages (admin RLS policy)
+      ├─ Groups by space/share_link
+      └─ Shows full conversation history
+
+DATABASE QUERIES (Admin bypasses owner RLS):
+  - SELECT * FROM profiles (admin policy)
+  - SELECT * FROM spaces (admin policy)
+  - SELECT * FROM chat_messages (admin policy)
+```
+
+---
+
+## End-to-End Flow Examples
+
+### Example 1: Job Seeker Creates AI Resume Bot
+
+```
+SCENARIO: Alex wants recruiters to easily learn about their background
+
+Timeline:
+─────────────────────────────────────────────────────────────────────
+
+Day 1: Setup
+  ├─ Alex signs up at /login
+  ├─ Creates space: "Alex's Career Profile"
+  ├─ Uploads: resume.pdf, cover_letter.txt
+  ├─ Adds typed note: "Personal projects and hobbies"
+  └─ Sets fallback: "That's not in my background, but feel free to ask about my experience!"
+
+Day 2: Share
+  ├─ Copies chat link from Documents tab
+  ├─ Adds to LinkedIn profile
+  ├─ Downloads QR code for business card
+  └─ Shares link in job applications
+
+Day 3+: Recruiters Chat
+  ├─ Recruiter 1 asks: "What's your Python experience?"
+  │   └─ AI: "I have 5 years of Python experience, primarily in data analysis..."
+  ├─ Recruiter 2 asks: "Where did you go to school?"
+  │   └─ AI: "I graduated from MIT with a BS in Computer Science..."
+  └─ Recruiter 3 asks: "What's your favorite color?"
+      └─ AI: "That's not in my background, but feel free to ask about my experience!"
+
+Day 7: Analytics
+  └─ Alex checks analytics:
+      ├─ 47 views
+      ├─ 12 conversations
+      └─ Most asked: experience, skills, education
+```
+
+### Example 2: Small Business Creates FAQ Bot
+
+```
+SCENARIO: Coffee shop wants to automate customer questions
+
+Timeline:
+─────────────────────────────────────────────────────────────────────
+
+Setup:
+  ├─ Owner creates space: "Bean & Brew FAQ"
+  ├─ Uploads: menu.pdf, hours.txt
+  ├─ Types notes: 
+  │   ├─ "We're located at 123 Main Street"
+  │   ├─ "Parking available in rear lot"
+  │   └─ "We offer dairy-free milk options"
+  └─ Sets fallback: "Please call us at 555-1234 for that question!"
+
+Distribution:
+  ├─ QR code printed on table tents
+  ├─ Link on Google Business profile
+  └─ QR code at register
+
+Customer Usage:
+  ├─ "What are your hours?" → "We're open 7am-8pm Monday through..."
+  ├─ "Do you have oat milk?" → "Yes! We offer dairy-free milk options..."
+  ├─ "Can I bring my dog?" → "Please call us at 555-1234 for that question!"
+  └─ Voice: "What's the WiFi password?" → AI speaks answer aloud
+```
+
+### Example 3: Admin Debugging User Issue
+
+```
+SCENARIO: User reports "my chat isn't showing answers"
+
+Timeline:
+─────────────────────────────────────────────────────────────────────
+
+Step 1: User reports issue
+  └─ User: "When visitors ask questions, they get blank responses"
+
+Step 2: Admin investigates
+  ├─ Goes to /admin
+  ├─ Finds user in Users tab
+  ├─ Clicks "View As" to impersonate
+  └─ Banner shows: "Viewing as Jane Doe - Exit"
+
+Step 3: Check space setup
+  ├─ Navigates to user's space
+  ├─ Sees Documents tab
+  ├─ Notices: All documents show "failed" status
+  └─ Error: "File too large for processing"
+
+Step 4: Resolution
+  ├─ Admin clicks "Exit" to stop impersonation
+  ├─ Contacts user: "Your files are too large. Try splitting them."
+  └─ User re-uploads smaller files, issue resolved
+
+Step 5: Verify fix
+  ├─ Admin impersonates again
+  ├─ Documents now show "ready" status
+  └─ Tests public chat: AI responds correctly
+```
 
 ---
 
@@ -1135,15 +1608,111 @@ if (!user) return new Response('Unauthorized', { status: 401 });
 
 ---
 
+## AI Context: Replicating This App
+
+> **For AI Developers**: This section provides everything needed to build a similar app.
+
+### App Summary (One Paragraph)
+
+**Know Me** is a knowledge-grounded Q&A application built with React, Supabase, and OpenAI. Users (Owners) create "Spaces" containing documents, notes, or voice transcripts. Each space gets a shareable chat link. Visitors access the chat without authentication and ask questions. The AI (GPT-4o-mini) answers using RAG: it searches an OpenAI Vector Store containing the space's documents and only answers based on found content. If no relevant content exists, it returns a configurable fallback message. The app uses RLS for security, SSE for streaming responses, and supports voice input/output.
+
+### Technology Choices & Why
+
+| Component | Technology | Why This Choice |
+|-----------|------------|-----------------|
+| Frontend | React + Vite + TypeScript | Fast dev, type safety, ecosystem |
+| Styling | Tailwind + shadcn/ui | Rapid prototyping, consistent design |
+| State | TanStack Query | Automatic caching, refetching, loading states |
+| Auth | Supabase Auth | Integrated with DB, handles sessions |
+| Database | Supabase (Postgres) | RLS, realtime, triggers, storage |
+| Vector Search | OpenAI Vector Store | Simple API, no self-hosted infra |
+| LLM | GPT-4o-mini | Fast, cheap, good quality |
+| Voice | Whisper + TTS | Best-in-class accuracy |
+| Hosting | Edge Functions (Deno) | Serverless, global, Supabase integrated |
+
+### Database Design Decisions
+
+1. **Profiles table**: Separate from auth.users for app-specific data
+2. **user_roles table**: Separate from profiles to prevent privilege escalation
+3. **Spaces → Documents → Chunks**: Hierarchical structure for RAG
+4. **share_links with token**: Public access without exposing DB IDs
+5. **chat_messages**: Persistent history for analytics and context
+
+### AI Architecture Decisions
+
+1. **Vector store per space**: Isolation prevents cross-contamination
+2. **Dual search**: OpenAI Vector Store + local document_chunks
+3. **Strict system prompt**: "Only answer from documents"
+4. **Owner-configurable fallback**: Personalized "I don't know" response
+5. **SSE streaming**: Real-time UX, works in all browsers
+
+### Security Architecture
+
+1. **RLS everywhere**: All tables have row-level security
+2. **Public functions**: Only `public-chat` is JWT-free
+3. **Token-based public access**: Random hex token, not predictable
+4. **Admin via separate table**: Prevents profile editing attacks
+5. **Service role in functions**: Bypass RLS only in backend
+
+### Files to Copy for Similar App
+
+| Category | Files |
+|----------|-------|
+| **Auth** | `AuthContext.tsx`, `ProtectedRoute.tsx`, `AdminRoute.tsx` |
+| **Hooks** | `useIsAdmin.ts`, `useVoiceRecording.ts`, `useTextToSpeech.ts` |
+| **Edge Functions** | `public-chat/`, `process-document/`, `voice-to-text/`, `text-to-speech/` |
+| **Schema** | All SQL in "Complete SQL Schema" section |
+| **Types** | `src/types/index.ts` |
+| **Services** | `src/services/api.ts` |
+
+### Common Modifications
+
+| If You Want To... | Change This... |
+|-------------------|----------------|
+| Use different LLM | Change model in `public-chat/index.ts` |
+| Add more file types | Update `process-document/index.ts` |
+| Change auth method | Modify `AuthContext.tsx` and Supabase config |
+| Add team features | Add `team_members` table, update RLS |
+| Add subscriptions | Integrate Stripe, add `subscriptions` table |
+| Change vector DB | Replace OpenAI Vector Store calls |
+
+---
+
 ## Secrets Required
 
-| Secret | Purpose |
-|--------|---------|
-| `OPENAI_API_KEY` | GPT + Vector Store API calls |
-| `SUPABASE_URL` | Database/auth endpoint |
-| `SUPABASE_ANON_KEY` | Public client access |
-| `SUPABASE_SERVICE_ROLE_KEY` | Edge function admin access |
+| Secret | Purpose | Where Used |
+|--------|---------|------------|
+| `OPENAI_API_KEY` | GPT + Vector Store API calls | All AI functions |
+| `SUPABASE_URL` | Database/auth endpoint | Edge functions |
+| `SUPABASE_ANON_KEY` | Public client access | Frontend + functions |
+| `SUPABASE_SERVICE_ROLE_KEY` | Edge function admin access | Edge functions |
+
+---
+
+## Deployment Checklist
+
+- [ ] All secrets configured in Supabase Edge Functions
+- [ ] Storage buckets created (documents, avatars)
+- [ ] pgvector extension enabled
+- [ ] RLS policies applied to all tables
+- [ ] Auto-confirm email enabled (or configure SMTP)
+- [ ] Edge functions deployed
+- [ ] Frontend built and deployed
+
+---
+
+## Troubleshooting Guide
+
+| Issue | Likely Cause | Solution |
+|-------|--------------|----------|
+| "Unauthorized" on API calls | Missing/expired JWT | Check auth flow, refresh token |
+| Documents stuck in "uploading" | process-document failed | Check function logs, file size |
+| Chat returns empty response | No vector store content | Verify documents are "ready" status |
+| Admin can't see all data | RLS policies wrong | Check has_role function exists |
+| Voice not working | Browser permissions | Request microphone access |
+| TTS not playing | Audio blocked | User interaction required first |
 
 ---
 
 *Last updated: December 2024*
+*Document version: 2.0 (Added complete flows and AI context)*
