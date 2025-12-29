@@ -2,18 +2,24 @@
 
 > **Purpose**: A knowledge-based Q&A app where owners upload documents, share links, and visitors ask questions answered by AI using only the uploaded content.
 
+> **Related Docs**: 
+> - [Developer Guide](./DEVELOPER.md) - Setup, patterns, and development workflow
+> - [API Documentation](./API.md) - API endpoints and usage
+> - [OpenAPI Spec](./openapi.yaml) - OpenAPI 3.0 specification
+
 ---
 
 ## Table of Contents
 1. [Overview](#overview)
 2. [Tech Stack](#tech-stack)
-3. [Database Schema](#database-schema)
-4. [Edge Functions (APIs)](#edge-functions-apis)
-5. [AI Integration](#ai-integration)
-6. [Authentication Flow](#authentication-flow)
-7. [Code Flow](#code-flow)
-8. [Security Model](#security-model)
-9. [File Structure](#file-structure)
+3. [Code Organization](#code-organization)
+4. [Database Schema](#database-schema)
+5. [Edge Functions (APIs)](#edge-functions-apis)
+6. [AI Integration](#ai-integration)
+7. [Authentication Flow](#authentication-flow)
+8. [Code Flow](#code-flow)
+9. [Security Model](#security-model)
+10. [File Structure](#file-structure)
 
 ---
 
@@ -70,6 +76,55 @@
 | **Storage** | Supabase Storage | File storage for documents |
 | **AI** | OpenAI API | GPT-4o-mini + Vector Store for RAG |
 | **Validation** | Zod | Schema validation |
+
+---
+
+## Code Organization
+
+The codebase follows industry-standard patterns for maintainability and scalability:
+
+### Layered Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                           PRESENTATION                               │
+│  React Components (pages/, components/)                              │
+│  - Handle UI rendering and user interactions                         │
+│  - Use hooks for data and logic                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                           HOOKS LAYER                                │
+│  Custom Hooks (hooks/)                                               │
+│  - useDocuments, useSpace, useShareLink, useAutoSave                │
+│  - Encapsulate state management and side effects                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                          SERVICE LAYER                               │
+│  API Services (services/api.ts)                                      │
+│  - spacesService, documentsService, shareLinksService               │
+│  - Centralized API calls with error handling                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                           DATA LAYER                                 │
+│  Supabase Client + Edge Functions                                    │
+│  - Database operations, file storage, AI processing                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/types/index.ts` | All TypeScript type definitions |
+| `src/constants/index.ts` | App-wide constants and configuration |
+| `src/services/api.ts` | Centralized API service functions |
+| `src/hooks/` | Reusable custom hooks |
+| `src/contexts/` | React Context providers |
+
+### Design Principles
+
+1. **Single Responsibility**: Each file/function does one thing well
+2. **DRY (Don't Repeat Yourself)**: Common patterns extracted to hooks/services
+3. **Type Safety**: Full TypeScript with strict mode
+4. **Separation of Concerns**: UI, logic, and data access are separate layers
+5. **Composition over Inheritance**: Hooks compose functionality
 
 ---
 
