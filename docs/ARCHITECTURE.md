@@ -308,6 +308,17 @@ Step 6: Continue Conversation
       ├─ AI maintains conversation context
       └─ Can reference earlier in conversation
 
+Step 7: Error Handling & Resilience
+  └─► If connection fails:
+      ├─ Automatic retry with exponential backoff (up to 3 attempts)
+      ├─ Shows retry progress indicator
+      ├─ User can cancel retry manually
+      └─ Final error message with "Try again" button
+  └─► If offline:
+      ├─ Offline banner displayed at top
+      ├─ Send disabled until connection restored
+      └─ Automatic reconnection detection
+
 DATABASE CHANGES:
   - UPDATE share_links SET view_count = view_count + 1, last_used_at = now()
   - INSERT INTO chat_messages (role: 'user', content: question)

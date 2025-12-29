@@ -235,6 +235,12 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 2. Get the share link from Documents tab
 3. Open the chat URL in incognito window
 
+**Resilience Features:**
+- **Offline Detection**: Shows banner when connection lost, hides send button
+- **Auto-Retry**: Failed requests retry up to 3 times with exponential backoff (1s, 2s, 4s + jitter)
+- **Retry Cancellation**: User can cancel retry via banner button
+- **Error Messages**: Inline error cards with contextual icons and "Try again" button
+
 ### Testing Document Uploads
 
 Supported file types:
