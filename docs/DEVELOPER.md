@@ -215,15 +215,32 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
 ### Debugging Document Processing
 
-1. Check document status in UI
+1. Check document status in UI (Ready/Failed/Indexing)
 2. View Edge Function logs: `supabase functions logs process-document`
 3. Check `error_message` field in documents table
+4. Verify file exists in storage bucket
+
+### Document Preview Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| PDF shows "blocked by browser" | Chrome security | Use "Open in new tab" or Download |
+| Image not loading | Signed URL expired | Refresh page to get new URL |
+| "No preview available" | Unsupported file type | Use Download button |
 
 ### Testing Public Chat
 
 1. Create a space with documents
 2. Get the share link from Documents tab
 3. Open the chat URL in incognito window
+
+### Testing Document Uploads
+
+Supported file types:
+- **PDF**: `.pdf` - Indexed for AI search, viewable via download
+- **Text**: `.txt` - Inline preview available
+- **Images**: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif` - Inline preview + OCR extraction
+- **Screenshots**: Same as images, OCR extracts visible text
 
 ### Adding Admin Users
 
