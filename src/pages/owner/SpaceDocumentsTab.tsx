@@ -11,7 +11,7 @@ import {
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
   ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
-  Eye, Pencil, ChevronDown, ChevronUp
+  Eye, Pencil, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
@@ -869,39 +869,72 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
                 />
               </div>
             ) : selectedDoc?.file_type === 'pdf' && filePreviewUrl ? (
-              <div className="w-full h-[55vh]">
-                <iframe
-                  src={filePreviewUrl}
-                  className="w-full h-full rounded-lg border"
-                  title={selectedDoc.filename}
-                />
+              <div className="text-center py-8">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                  <FileText className="w-8 h-8 text-primary" />
+                </div>
+                <p className="text-muted-foreground mb-2">
+                  PDF preview blocked by browser security
+                </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Click below to view or download the document
+                </p>
               </div>
             ) : (
               <div className="text-center py-8">
                 <p className="text-muted-foreground mb-4">
                   Preview not available
                 </p>
-                {selectedDoc?.file_path && (
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (selectedDoc?.file_path) {
-                        const { data } = await supabase.storage
-                          .from('documents')
-                          .createSignedUrl(selectedDoc.file_path, 3600);
-                        if (data?.signedUrl) {
-                          window.open(data.signedUrl, '_blank');
-                        }
-                      }
-                    }}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open in new tab
-                  </Button>
-                )}
               </div>
             )}
           </ScrollArea>
+          
+          {/* Action buttons for files */}
+          {selectedDoc?.file_path && (
+            <div className="flex justify-center gap-3 pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (selectedDoc?.file_path) {
+                    const { data } = await supabase.storage
+                      .from('documents')
+                      .createSignedUrl(selectedDoc.file_path, 3600);
+                    if (data?.signedUrl) {
+                      window.open(data.signedUrl, '_blank');
+                    }
+                  }
+                }}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open in new tab
+              </Button>
+              <Button
+                variant="default"
+                className="gradient-primary text-primary-foreground"
+                onClick={async () => {
+                  if (selectedDoc?.file_path) {
+                    const { data } = await supabase.storage
+                      .from('documents')
+                      .download(selectedDoc.file_path);
+                    if (data) {
+                      const url = URL.createObjectURL(data);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = selectedDoc.filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      toast({ title: 'Download started', description: selectedDoc.filename });
+                    }
+                  }
+                }}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
