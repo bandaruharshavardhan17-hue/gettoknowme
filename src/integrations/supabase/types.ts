@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       chat_messages: {
         Row: {
+          ai_model: string | null
           content: string
           created_at: string
           id: string
@@ -24,6 +25,7 @@ export type Database = {
           space_id: string
         }
         Insert: {
+          ai_model?: string | null
           content: string
           created_at?: string
           id?: string
@@ -32,6 +34,7 @@ export type Database = {
           space_id: string
         }
         Update: {
+          ai_model?: string | null
           content?: string
           created_at?: string
           id?: string

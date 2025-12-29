@@ -255,7 +255,7 @@ Your response should be: "${ownerInstructions}"`;
               if (!line.startsWith('data: ')) continue;
               const data = line.slice(6).trim();
               if (data === '[DONE]') {
-                // Save assistant response to chat history
+                // Save assistant response to chat history with AI model info
                 if (fullAssistantResponse.trim()) {
                   await supabase
                     .from('chat_messages')
@@ -264,6 +264,7 @@ Your response should be: "${ownerInstructions}"`;
                       space_id: shareLink.spaces.id,
                       role: 'assistant',
                       content: fullAssistantResponse.trim(),
+                      ai_model: aiModel,
                     });
                 }
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));

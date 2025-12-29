@@ -54,6 +54,11 @@ export interface CreateNotePayload {
 // =============================================================================
 
 /**
+ * Available AI models for chat responses
+ */
+export type AIModel = 'gpt-4o-mini' | 'gpt-4o' | 'gpt-4-turbo' | 'gpt-3.5-turbo';
+
+/**
  * Space entity - a knowledge container that holds documents
  */
 export interface Space {
@@ -61,6 +66,7 @@ export interface Space {
   owner_id: string;
   name: string;
   description: string | null;
+  ai_model: AIModel | string | null;
   openai_vector_store_id: string | null;
   created_at: string;
   updated_at: string;
@@ -72,6 +78,7 @@ export interface Space {
 export interface CreateSpacePayload {
   name: string;
   description?: string;
+  ai_model?: AIModel;
 }
 
 /**
@@ -80,6 +87,7 @@ export interface CreateSpacePayload {
 export interface UpdateSpacePayload {
   name?: string;
   description?: string;
+  ai_model?: AIModel;
 }
 
 // =============================================================================
@@ -126,6 +134,7 @@ export interface ChatMessage {
   share_link_id: string;
   role: ChatRole;
   content: string;
+  ai_model?: string | null;
   created_at: string;
 }
 
