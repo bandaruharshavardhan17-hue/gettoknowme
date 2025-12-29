@@ -269,6 +269,333 @@ created_at: timestamptz
 | `match_document_chunks()` | Vector similarity search for RAG |
 | `update_updated_at_column()` | Trigger: Auto-update timestamps |
 
+### Complete SQL Schema
+
+Below is the complete SQL to recreate the database schema:
+
+```sql
+-- =============================================================================
+-- EXTENSIONS
+-- =============================================================================
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+-- =============================================================================
+-- ENUMS
+-- =============================================================================
+CREATE TYPE public.app_role AS ENUM ('admin', 'user');
+CREATE TYPE public.document_status AS ENUM ('uploading', 'indexing', 'ready', 'failed');
+
+-- =============================================================================
+-- TABLES
+-- =============================================================================
+
+-- Profiles (linked to Supabase Auth)
+CREATE TABLE public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
+  display_name TEXT,
+  avatar_url TEXT,
+  tutorial_completed BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- User roles for admin access
+CREATE TABLE public.user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role app_role NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, role)
+);
+
+-- Knowledge spaces
+CREATE TABLE public.spaces (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,  -- AI fallback instructions
+  openai_vector_store_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Documents (files, notes, voice transcripts)
+CREATE TABLE public.documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  space_id UUID NOT NULL REFERENCES public.spaces(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  file_type TEXT NOT NULL,  -- 'pdf', 'txt', 'note', 'image'
+  file_path TEXT,
+  content_text TEXT,
+  status document_status NOT NULL DEFAULT 'uploading',
+  error_message TEXT,
+  openai_file_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Document chunks for vector search
+CREATE TABLE public.document_chunks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id UUID NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  embedding vector(1536),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Share links for public access
+CREATE TABLE public.share_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  space_id UUID NOT NULL REFERENCES public.spaces(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name TEXT,
+  revoked BOOLEAN NOT NULL DEFAULT false,
+  view_count INTEGER NOT NULL DEFAULT 0,
+  last_used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Chat message history
+CREATE TABLE public.chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  space_id UUID NOT NULL REFERENCES public.spaces(id) ON DELETE CASCADE,
+  share_link_id UUID NOT NULL REFERENCES public.share_links(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,  -- 'user' or 'assistant'
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =============================================================================
+-- INDEXES
+-- =============================================================================
+CREATE INDEX idx_documents_space_id ON public.documents(space_id);
+CREATE INDEX idx_documents_status ON public.documents(status);
+CREATE INDEX idx_document_chunks_document_id ON public.document_chunks(document_id);
+CREATE INDEX idx_share_links_space_id ON public.share_links(space_id);
+CREATE INDEX idx_share_links_token ON public.share_links(token);
+CREATE INDEX idx_chat_messages_share_link_id ON public.chat_messages(share_link_id);
+
+-- =============================================================================
+-- FUNCTIONS
+-- =============================================================================
+
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = public;
+
+-- Check if user has a specific role
+CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id AND role = _role
+  )
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+-- Create profile on auth signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, display_name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data ->> 'display_name');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Create default share link when space is created
+CREATE OR REPLACE FUNCTION public.create_default_share_link()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.share_links (space_id, name)
+  VALUES (NEW.id, 'Default Link');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Vector similarity search for RAG
+CREATE OR REPLACE FUNCTION public.match_document_chunks(
+  query_embedding vector,
+  match_threshold float,
+  match_count int,
+  p_space_id uuid
+)
+RETURNS TABLE (id uuid, document_id uuid, content text, similarity float)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT dc.id, dc.document_id, dc.content,
+         1 - (dc.embedding <=> query_embedding) as similarity
+  FROM public.document_chunks dc
+  JOIN public.documents d ON d.id = dc.document_id
+  WHERE d.space_id = p_space_id
+    AND d.status = 'ready'
+    AND 1 - (dc.embedding <=> query_embedding) > match_threshold
+  ORDER BY dc.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- =============================================================================
+-- TRIGGERS
+-- =============================================================================
+CREATE TRIGGER update_profiles_updated_at
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_spaces_updated_at
+  BEFORE UPDATE ON public.spaces
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_documents_updated_at
+  BEFORE UPDATE ON public.documents
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+CREATE TRIGGER on_space_created
+  AFTER INSERT ON public.spaces
+  FOR EACH ROW EXECUTE FUNCTION create_default_share_link();
+
+-- =============================================================================
+-- ROW LEVEL SECURITY
+-- =============================================================================
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.spaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.document_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.share_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Users can view their own profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON public.profiles
+  FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert their own profile" ON public.profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Admins can view all profiles" ON public.profiles
+  FOR SELECT USING (has_role(auth.uid(), 'admin'));
+
+-- Spaces policies
+CREATE POLICY "Owners can view their own spaces" ON public.spaces
+  FOR SELECT USING (auth.uid() = owner_id);
+CREATE POLICY "Owners can create spaces" ON public.spaces
+  FOR INSERT WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "Owners can update their own spaces" ON public.spaces
+  FOR UPDATE USING (auth.uid() = owner_id);
+CREATE POLICY "Owners can delete their own spaces" ON public.spaces
+  FOR DELETE USING (auth.uid() = owner_id);
+CREATE POLICY "Admins can view all spaces" ON public.spaces
+  FOR SELECT USING (has_role(auth.uid(), 'admin'));
+
+-- Documents policies
+CREATE POLICY "Owners can view documents in their spaces" ON public.documents
+  FOR SELECT USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = documents.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can create documents in their spaces" ON public.documents
+  FOR INSERT WITH CHECK (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = documents.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can update documents in their spaces" ON public.documents
+  FOR UPDATE USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = documents.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can delete documents in their spaces" ON public.documents
+  FOR DELETE USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = documents.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Admins can view all documents" ON public.documents
+  FOR SELECT USING (has_role(auth.uid(), 'admin'));
+
+-- Document chunks policies
+CREATE POLICY "Owners can view chunks in their documents" ON public.document_chunks
+  FOR SELECT USING (EXISTS (
+    SELECT 1 FROM public.documents d
+    JOIN public.spaces s ON s.id = d.space_id
+    WHERE d.id = document_chunks.document_id AND s.owner_id = auth.uid()
+  ));
+CREATE POLICY "System can insert chunks" ON public.document_chunks
+  FOR INSERT WITH CHECK (true);
+
+-- Share links policies
+CREATE POLICY "Owners can view share links for their spaces" ON public.share_links
+  FOR SELECT USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = share_links.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can create share links for their spaces" ON public.share_links
+  FOR INSERT WITH CHECK (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = share_links.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can update share links for their spaces" ON public.share_links
+  FOR UPDATE USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = share_links.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Owners can delete share links for their spaces" ON public.share_links
+  FOR DELETE USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = share_links.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Admins can view all share links" ON public.share_links
+  FOR SELECT USING (has_role(auth.uid(), 'admin'));
+
+-- Chat messages policies
+CREATE POLICY "Owners can view chat messages for their spaces" ON public.chat_messages
+  FOR SELECT USING (EXISTS (
+    SELECT 1 FROM public.spaces WHERE spaces.id = chat_messages.space_id AND spaces.owner_id = auth.uid()
+  ));
+CREATE POLICY "Service role can insert chat messages" ON public.chat_messages
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Admins can view all chat messages" ON public.chat_messages
+  FOR SELECT USING (has_role(auth.uid(), 'admin'));
+
+-- User roles policies
+CREATE POLICY "Users can view their own roles" ON public.user_roles
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Only admins can manage roles" ON public.user_roles
+  FOR ALL USING (has_role(auth.uid(), 'admin'));
+
+-- =============================================================================
+-- STORAGE BUCKETS
+-- =============================================================================
+INSERT INTO storage.buckets (id, name, public) VALUES ('documents', 'documents', false);
+INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true);
+
+-- Storage policies
+CREATE POLICY "Owners can upload to documents bucket" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'documents' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+CREATE POLICY "Owners can view their documents" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'documents' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+CREATE POLICY "Owners can delete their documents" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'documents' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+CREATE POLICY "Anyone can view avatars" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
+CREATE POLICY "Users can upload own avatar" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'avatars' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+```
+
 ---
 
 ## Edge Functions (APIs)
@@ -455,30 +782,61 @@ User Question
 
 ### AI Models Used
 
-| Model | Use Case | Location |
-|-------|----------|----------|
-| `gpt-4o-mini` | Chat completions | `public-chat` |
-| `gpt-4o-mini` (Vision) | Image text extraction | `process-document` |
-| OpenAI Vector Store | Document embedding & search | `process-document`, `public-chat` |
+| Model | Use Case | Location | Notes |
+|-------|----------|----------|-------|
+| `gpt-4o-mini` | Chat completions | `public-chat` | Fast, cost-effective |
+| `gpt-4o-mini` (Vision) | Image text extraction | `process-document` | OCR for uploaded images |
+| `whisper-1` | Voice transcription | `voice-to-text` | Audio → text |
+| `tts-1` | Text-to-speech | `text-to-speech` | AI response playback |
+| OpenAI Vector Store | Document embedding & search | `process-document`, `public-chat` | RAG retrieval |
+
+### AI Configuration (Edge Function Secrets)
+
+These secrets are configured in Supabase Edge Functions:
+
+| Secret | Purpose | Required |
+|--------|---------|----------|
+| `OPENAI_API_KEY` | OpenAI API access | Yes |
+| `SUPABASE_URL` | Database access in functions | Yes |
+| `SUPABASE_ANON_KEY` | Public API access | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bypass RLS in functions | Yes |
 
 ### Prompt Engineering
 
-**System Prompt Template:**
+**System Prompt Template (public-chat):**
 ```
 You are a helpful AI assistant. Answer questions based ONLY on the following document content:
 
 ---DOCUMENTS---
-{extracted_content}
+{extracted_content_from_vector_store}
 ---END DOCUMENTS---
 
 CRITICAL RULES:
 1. Answer ONLY based on the document content above.
-2. For personal questions, find info in docs and answer as if YOU are that person.
-3. If info is NOT in documents, say: "{owner_fallback_message}"
+2. For personal questions (like "What is your experience?"), find the info in docs 
+   and answer as if YOU are that person (first person: "I have...", "My experience...").
+3. If the information is NOT in the documents, say: "{owner_fallback_message}"
 4. Never make up information not in the documents.
+5. Be concise but complete.
+6. When referencing documents, be specific about where you found the information.
 ```
 
-**No Hallucination Guarantee**: If no relevant content found → "I don't know from the provided documents."
+**Image Processing Prompt (process-document):**
+```
+Extract all text content from this image. Include:
+- Any visible text, headings, paragraphs
+- Text in tables, charts, or diagrams
+- Labels and captions
+Preserve the structure as much as possible.
+```
+
+### No Hallucination Guarantee
+
+The system enforces strict grounding:
+1. **Vector search first**: Only documents with similarity > threshold are used
+2. **System prompt rules**: Explicit instruction to only use document content
+3. **Fallback message**: Owner-configurable response when no answer found
+4. **No context = refuse**: If vector store returns nothing → "I don't know"
 
 ---
 

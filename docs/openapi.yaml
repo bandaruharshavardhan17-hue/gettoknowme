@@ -38,6 +38,8 @@ tags:
     description: View usage analytics
   - name: Public Chat
     description: Public chat endpoint (no auth required)
+  - name: Voice
+    description: Voice-to-text and text-to-speech
   - name: Admin
     description: Admin-only endpoints for platform management
 
@@ -390,6 +392,61 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '429':
           description: Rate limit exceeded
+
+  /voice-to-text:
+    post:
+      tags: [Voice]
+      summary: Transcribe audio to text
+      description: |
+        Transcribes audio using OpenAI Whisper.
+        Send base64-encoded audio data.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceToTextRequest'
+      responses:
+        '200':
+          description: Transcription successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceToTextResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /text-to-speech:
+    post:
+      tags: [Voice]
+      summary: Generate speech from text
+      description: |
+        Generates audio from text using OpenAI TTS.
+        Returns base64-encoded MP3 audio.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TextToSpeechRequest'
+      responses:
+        '200':
+          description: Audio generated
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api-admin:
     get:
@@ -1034,3 +1091,35 @@ components:
           enum: [admin, user]
           default: admin
           description: Role to add or remove
+
+    # Voice schemas
+    VoiceToTextRequest:
+      type: object
+      required: [audio]
+      properties:
+        audio:
+          type: string
+          format: byte
+          description: Base64-encoded audio data (webm, mp3, wav)
+
+    VoiceToTextResponse:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Transcribed text
+          example: "Hello, this is my voice note."
+
+    TextToSpeechRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Text to convert to speech
+          example: "Hello, how can I help you today?"
+        voice:
+          type: string
+          enum: [alloy, ash, ballad, coral, echo, sage, shimmer, verse]
+          default: alloy
+          description: Voice to use for TTS
