@@ -419,7 +419,7 @@ DELETE /api-admin?resource=spaces&id=<space_id>
 
 ### 7. Voice-to-Text API (`/voice-to-text`)
 
-Transcribes audio to text using OpenAI Whisper. No JWT verification required.
+Transcribes audio to text using OpenAI Whisper with chunked processing for memory efficiency. No JWT verification required.
 
 ```http
 POST /voice-to-text
@@ -432,9 +432,15 @@ Content-Type: application/json
 
 **Audio Requirements:**
 - Format: WebM with Opus codec (preferred), WebM, or MP4
+- Maximum duration: 5 minutes
 - Minimum duration: ~1 second
 - Sample rate: Any (Whisper handles resampling)
 - The audio should be base64 encoded from a Blob
+
+**Features:**
+- **Chunked Processing**: Base64 data processed in 32KB chunks to prevent memory issues
+- **Long Recordings**: Supports recordings up to 5 minutes
+- **Real-time Feedback**: Client provides visual waveform indicator during recording
 
 **Client-side recording example:**
 ```typescript
@@ -443,6 +449,13 @@ const mediaRecorder = new MediaRecorder(stream, {
   audioBitsPerSecond: 128000
 });
 mediaRecorder.start(250); // Collect chunks every 250ms
+
+// Real-time audio level monitoring
+const analyser = audioContext.createAnalyser();
+const dataArray = new Uint8Array(analyser.frequencyBinCount);
+analyser.getByteFrequencyData(dataArray);
+const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+const normalizedLevel = Math.min(average / 128, 1);
 ```
 
 **Response:**

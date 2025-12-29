@@ -1182,11 +1182,18 @@ Supported File Types:
 ### Voice & Audio
 
 #### `voice-to-text`
-Transcribes audio to text using OpenAI Whisper.
+Transcribes audio to text using OpenAI Whisper with chunked processing for memory efficiency.
 
 ```typescript
 POST { audio: base64_string }
 Response: { text: string }
+
+Features:
+- Chunked base64 processing (32KB chunks) to prevent memory issues
+- Supports recordings up to 5 minutes
+- Real-time audio level monitoring on client
+- Visual waveform indicator during recording
+- Duration tracking with formatted display
 
 Used by: Owner voice notes, Public chat voice input
 ```
@@ -1469,9 +1476,13 @@ USING (has_role(auth.uid(), 'admin'));
 │   │
 │   ├── hooks/
 │   │   ├── useIsAdmin.ts          # Admin role check
-│   │   ├── useVoiceRecording.ts   # Voice input hook
+│   │   ├── useVoiceRecording.ts   # Voice input hook (chunked audio, waveform)
 │   │   ├── useTextToSpeech.ts     # TTS playback hook
+│   │   ├── useAutoSave.ts         # Auto-save for notes/fallback
 │   │   └── use-mobile.tsx         # Responsive detection
+│   │
+│   ├── components/
+│   │   ├── WaveformIndicator.tsx  # Visual audio level feedback
 │   │
 │   ├── integrations/supabase/
 │   │   ├── client.ts              # Supabase client (auto-generated)
@@ -1541,14 +1552,26 @@ The Documents tab uses a tabbed interface for adding content:
 | **Upload** | Drag/click to upload PDF, TXT, images, screenshots |
 | **Paste** | Paste text content with title |
 | **Type** | Manually type information |
-| **Voice** | Record voice, auto-transcribe via Whisper |
+| **Voice** | Record voice with waveform indicator, auto-transcribe via Whisper |
+
+**Voice Recording Features:**
+- Real-time audio level visualization (WaveformIndicator component)
+- Duration tracking and display (up to 5 minutes)
+- Chunked audio processing for memory efficiency
+- Visual feedback during recording and transcription
 
 Additional sections:
+- **AI Settings**: Model selection (GPT-4o-mini, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo) with visual save confirmation
 - **AI Fallback Response**: Collapsible section for setting what AI says when no answer found
 - **Documents List**: Shows all uploaded docs with View/Edit/Delete actions
   - View: Opens dialog showing content preview
   - Edit: (Notes only) Edit title and content
   - Delete: Remove document from knowledge base
+
+**AI Model Selection:**
+- Uses `initialModelLoadedRef` to prevent model reset during re-renders
+- Shows visual "Model saved" indicator when successfully updated
+- Debounced saving to prevent excessive API calls
 
 ### Document Preview & Download
 
