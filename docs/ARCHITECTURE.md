@@ -51,6 +51,7 @@
    - Create "Spaces" (knowledge containers)
    - Upload documents (PDF, TXT, images) or add typed notes
    - Record voice notes (auto-transcribed)
+   - Choose AI model per space (GPT-4o-mini, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo)
    - Generate shareable chat links with QR codes
    - View conversation history and analytics
    - Set custom AI fallback responses
@@ -60,6 +61,7 @@
    - Ask questions via text or voice
    - Hear AI responses via text-to-speech
    - Get answers grounded in uploaded documents only
+   - Save and download chat conversations
 
 3. **For Admins**:
    - View all users, spaces, and conversations
@@ -788,6 +790,7 @@ CREATE TABLE public.spaces (
   owner_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,  -- AI fallback instructions
+  ai_model TEXT DEFAULT 'gpt-4o-mini',  -- OpenAI model: gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo
   openai_vector_store_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1642,7 +1645,7 @@ if (!user) return new Response('Unauthorized', { status: 401 });
 
 ### App Summary (One Paragraph)
 
-**Know Me** is a knowledge-grounded Q&A application built with React, Supabase, and OpenAI. Users (Owners) create "Spaces" containing documents, notes, or voice transcripts. Each space gets a shareable chat link. Visitors access the chat without authentication and ask questions. The AI (GPT-4o-mini) answers using RAG: it searches an OpenAI Vector Store containing the space's documents and only answers based on found content. If no relevant content exists, it returns a configurable fallback message. The app uses RLS for security, SSE for streaming responses, and supports voice input/output.
+**Know Me** is a knowledge-grounded Q&A application built with React, Supabase, and OpenAI. Users (Owners) create "Spaces" containing documents, notes, or voice transcripts, and can choose which OpenAI model to use per space (gpt-4o-mini, gpt-4o, gpt-4-turbo, or gpt-3.5-turbo). Each space gets a shareable chat link. Visitors access the chat without authentication and ask questions. The AI answers using RAG: it searches an OpenAI Vector Store containing the space's documents and only answers based on found content. If no relevant content exists, it returns a configurable fallback message. The app uses RLS for security, SSE for streaming responses, and supports voice input/output. Visitors can save/download chat conversations.
 
 ### Technology Choices & Why
 
@@ -1654,7 +1657,7 @@ if (!user) return new Response('Unauthorized', { status: 401 });
 | Auth | Supabase Auth | Integrated with DB, handles sessions |
 | Database | Supabase (Postgres) | RLS, realtime, triggers, storage |
 | Vector Search | OpenAI Vector Store | Simple API, no self-hosted infra |
-| LLM | GPT-4o-mini | Fast, cheap, good quality |
+| LLM | GPT-4o-mini/4o/4-turbo/3.5-turbo | Configurable per space |
 | Voice | Whisper + TTS | Best-in-class accuracy |
 | Hosting | Edge Functions (Deno) | Serverless, global, Supabase integrated |
 
@@ -1697,12 +1700,13 @@ if (!user) return new Response('Unauthorized', { status: 401 });
 
 | If You Want To... | Change This... |
 |-------------------|----------------|
-| Use different LLM | Change model in `public-chat/index.ts` |
+| Use different LLM | Configure `ai_model` per space in UI or API |
 | Add more file types | Update `process-document/index.ts` |
 | Change auth method | Modify `AuthContext.tsx` and Supabase config |
 | Add team features | Add `team_members` table, update RLS |
 | Add subscriptions | Integrate Stripe, add `subscriptions` table |
 | Change vector DB | Replace OpenAI Vector Store calls |
+| Add more AI models | Update `AI_MODELS` array in `SpaceDocumentsTab.tsx` |
 
 ---
 
@@ -1743,4 +1747,4 @@ if (!user) return new Response('Unauthorized', { status: 401 });
 ---
 
 *Last updated: December 2024*
-*Document version: 2.0 (Added complete flows and AI context)*
+*Document version: 2.1 (Added AI model selection, chat download, updated features)*

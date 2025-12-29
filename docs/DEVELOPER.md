@@ -190,7 +190,7 @@ See `docs/ARCHITECTURE.md` for complete schema documentation.
 
 Key tables:
 - `profiles` - User profile data
-- `spaces` - Knowledge containers
+- `spaces` - Knowledge containers (includes `ai_model` for per-space model selection)
 - `documents` - Files and notes
 - `document_chunks` - Text chunks with embeddings
 - `share_links` - Public access tokens
@@ -336,3 +336,23 @@ The "Add Knowledge" section uses a 3-tab layout:
 - **Voice** - Voice recording with transcription
 
 Note: "Paste" and "Type" were consolidated into a single "Note" tab as they served identical functionality.
+
+### AI Settings Section
+
+Each space has an "AI Settings" section that allows:
+- **Model Selection** - Choose from GPT-4o-mini (default), GPT-4o, GPT-4 Turbo, or GPT-3.5 Turbo
+- **Fallback Response** - Custom message when AI doesn't find an answer
+
+The selected model is stored in `spaces.ai_model` and used by `public-chat` edge function.
+
+### Public Chat Features
+
+The visitor chat interface (`PublicChat.tsx`) includes:
+- **Save Chat** - Download conversation as a text file
+- **Close Chat** - Closes with optional download prompt
+- **Voice Input** - Microphone recording with transcription
+- **Text-to-Speech** - Listen to AI responses
+
+---
+
+*Last updated: December 2024*

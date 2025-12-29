@@ -14,6 +14,7 @@ interface Space {
   id: string;
   name: string;
   description: string | null;
+  ai_model: string | null;
 }
 
 export default function SpaceDetail() {
@@ -100,7 +101,7 @@ export default function SpaceDetail() {
           </TabsList>
 
           <TabsContent value="documents">
-            <SpaceDocumentsTab spaceId={spaceId!} description={space.description} />
+            <SpaceDocumentsTab spaceId={spaceId!} description={space.description} aiModel={space.ai_model} />
           </TabsContent>
 
           <TabsContent value="history">

@@ -11,7 +11,7 @@ import {
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
   PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
-  Eye, Pencil, ChevronDown, ChevronUp, Download
+  Eye, Pencil, ChevronDown, ChevronUp, Download, Bot
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
@@ -29,6 +29,13 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type DocumentStatus = 'uploading' | 'indexing' | 'ready' | 'failed';
 
@@ -46,9 +53,17 @@ interface Document {
 interface SpaceDocumentsTabProps {
   spaceId: string;
   description: string | null;
+  aiModel?: string | null;
 }
 
-export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumentsTabProps) {
+const AI_MODELS = [
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast & affordable' },
+  { value: 'gpt-4o', label: 'GPT-4o', description: 'Most capable' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'High performance' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Economy option' },
+];
+
+export default function SpaceDocumentsTab({ spaceId, description, aiModel }: SpaceDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -56,6 +71,10 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [savingInstructions, setSavingInstructions] = useState(false);
   const [instructionsSaved, setInstructionsSaved] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // AI model state
+  const [selectedModel, setSelectedModel] = useState(aiModel || 'gpt-4o-mini');
+  const [savingModel, setSavingModel] = useState(false);
   
   // Input tab state
   const [activeInputTab, setActiveInputTab] = useState('upload');
@@ -137,6 +156,29 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     setAiInstructions(description || '');
     setInstructionsSaved(false);
   }, [description]);
+
+  useEffect(() => {
+    setSelectedModel(aiModel || 'gpt-4o-mini');
+  }, [aiModel]);
+
+  const handleModelChange = async (model: string) => {
+    setSelectedModel(model);
+    setSavingModel(true);
+    try {
+      const { error } = await supabase
+        .from('spaces')
+        .update({ ai_model: model })
+        .eq('id', spaceId);
+
+      if (error) throw error;
+      toast({ title: 'AI model updated', description: `Using ${AI_MODELS.find(m => m.value === model)?.label}` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update AI model', variant: 'destructive' });
+      setSelectedModel(aiModel || 'gpt-4o-mini');
+    } finally {
+      setSavingModel(false);
+    }
+  };
 
   // Auto-save AI instructions with debounce
   const saveInstructions = useCallback(async (instructions: string) => {
@@ -629,7 +671,7 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
         </CardContent>
       </Card>
 
-      {/* AI Instructions (Collapsible) */}
+      {/* AI Settings (Collapsible) */}
       <Collapsible open={aiSectionOpen} onOpenChange={setAiSectionOpen}>
         <Card>
           <CollapsibleTrigger asChild>
@@ -637,37 +679,70 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <CardTitle className="text-base font-display">AI Fallback Response</CardTitle>
+                  <CardTitle className="text-base font-display">AI Settings</CardTitle>
                 </div>
                 {aiSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </div>
               <CardDescription className="text-left">
-                What should the AI say when it doesn't find an answer in your documents?
+                Configure the AI model and fallback response
               </CardDescription>
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="space-y-3 pt-0">
-              <Textarea
-                placeholder="e.g., I'm sorry, I don't have information about that. Please contact us at support@company.com for more help."
-                value={aiInstructions}
-                onChange={(e) => handleInstructionsChange(e.target.value)}
-                rows={3}
-                className="resize-none"
-              />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
-                {savingInstructions && (
-                  <>
+            <CardContent className="space-y-4 pt-0">
+              {/* AI Model Selection */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Bot className="w-4 h-4" />
+                  AI Model
+                </Label>
+                <Select value={selectedModel} onValueChange={handleModelChange} disabled={savingModel}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select AI model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AI_MODELS.map((model) => (
+                      <SelectItem key={model.value} value={model.value}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{model.label}</span>
+                          <span className="text-muted-foreground text-xs">- {model.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {savingModel && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Saving...</span>
-                  </>
+                    <span>Updating model...</span>
+                  </div>
                 )}
-                {instructionsSaved && !savingInstructions && (
-                  <>
-                    <CheckCircle className="w-3 h-3 text-green-500" />
-                    <span className="text-green-600">Saved</span>
-                  </>
-                )}
+              </div>
+
+              {/* AI Fallback Response */}
+              <div className="space-y-2">
+                <Label>Fallback Response</Label>
+                <Textarea
+                  placeholder="e.g., I'm sorry, I don't have information about that. Please contact us at support@company.com for more help."
+                  value={aiInstructions}
+                  onChange={(e) => handleInstructionsChange(e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                />
+                <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
+                  {savingInstructions && (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  )}
+                  {instructionsSaved && !savingInstructions && (
+                    <>
+                      <CheckCircle className="w-3 h-3 text-green-500" />
+                      <span className="text-green-600">Saved</span>
+                    </>
+                  )}
+                </div>
               </div>
             </CardContent>
           </CollapsibleContent>

@@ -12,9 +12,16 @@ info:
     - 100 requests per minute for authenticated endpoints
     - 30 requests per minute for public-chat endpoint per IP
     
+    ## AI Models
+    Each space can be configured to use a different OpenAI model:
+    - `gpt-4o-mini` - Fast & affordable (default)
+    - `gpt-4o` - Most capable
+    - `gpt-4-turbo` - High performance
+    - `gpt-3.5-turbo` - Economy option
+    
     ## Errors
     All errors return JSON with an `error` field containing a human-readable message.
-  version: 1.1.0
+  version: 1.2.0
   contact:
     name: Know Me Support
   license:
@@ -631,8 +638,14 @@ components:
         description:
           type: string
           nullable: true
-          description: AI instructions for this space
+          description: AI fallback instructions for this space
           example: "Only answer questions about our products"
+        ai_model:
+          type: string
+          description: OpenAI model to use for chat responses
+          enum: [gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo]
+          default: gpt-4o-mini
+          example: "gpt-4o-mini"
         document_count:
           type: integer
           example: 5
@@ -671,8 +684,13 @@ components:
           example: "My Knowledge Base"
         description:
           type: string
-          description: AI instructions for answering questions
+          description: AI fallback instructions for answering questions
           example: "Be helpful and concise"
+        ai_model:
+          type: string
+          description: OpenAI model to use for chat
+          enum: [gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo]
+          default: gpt-4o-mini
 
     UpdateSpaceRequest:
       type: object
@@ -682,6 +700,10 @@ components:
         description:
           type: string
           nullable: true
+        ai_model:
+          type: string
+          description: OpenAI model to use for chat
+          enum: [gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo]
 
     # Document schemas
     Document:

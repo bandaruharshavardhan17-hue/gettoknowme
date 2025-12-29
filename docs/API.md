@@ -31,6 +31,7 @@ GET /api-spaces
       "id": "uuid",
       "name": "My Knowledge Base",
       "description": "AI instructions",
+      "ai_model": "gpt-4o-mini",
       "document_count": 5,
       "created_at": "2024-01-01T00:00:00Z"
     }
@@ -50,13 +51,14 @@ Content-Type: application/json
 
 {
   "name": "My New Space",
-  "description": "Optional AI instructions"
+  "description": "Optional AI instructions",
+  "ai_model": "gpt-4o-mini"
 }
 ```
 **Response:** `201 Created`
 ```json
 {
-  "space": { "id": "uuid", "name": "My New Space", ... }
+  "space": { "id": "uuid", "name": "My New Space", "ai_model": "gpt-4o-mini", ... }
 }
 ```
 
@@ -67,9 +69,18 @@ Content-Type: application/json
 
 {
   "name": "Updated Name",
-  "description": "Updated instructions"
+  "description": "Updated instructions",
+  "ai_model": "gpt-4o"
 }
 ```
+
+**Available AI Models:**
+| Model | Description | Use Case |
+|-------|-------------|----------|
+| `gpt-4o-mini` | Fast & affordable (default) | General Q&A, high volume |
+| `gpt-4o` | Most capable | Complex reasoning, nuanced responses |
+| `gpt-4-turbo` | High performance | Detailed technical content |
+| `gpt-3.5-turbo` | Economy option | Simple Q&A, cost-sensitive |
 
 #### Delete space
 ```http
@@ -544,3 +555,46 @@ await fetch('https://oqvvffeaffyoapdtpmjr.supabase.co/functions/v1/api-admin?res
   })
 });
 ```
+
+---
+
+## 9. Content Generation API (`/generate-content`)
+
+Generates content using AI for knowledge base documents.
+
+```http
+POST /generate-content
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "prompt": "Write a FAQ about our product",
+  "context": "Optional previous conversation context"
+}
+```
+
+**Response:**
+```json
+{
+  "title": "Suggested title for the content",
+  "content": "Generated content..."
+}
+```
+
+---
+
+## Chat Features
+
+### Save & Download Chat
+Visitors can save chat conversations locally as text files. The download includes:
+- Space name and timestamp
+- Full conversation history with role labels
+- Formatted for easy reading
+
+### Close Chat Dialog
+When visitors close the chat, they're prompted to optionally download the conversation before closing.
+
+---
+
+*Last updated: December 2024*
+*API version: 1.2.0*
