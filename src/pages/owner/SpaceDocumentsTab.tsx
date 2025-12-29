@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
-  ClipboardPaste, PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
+  PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
   Eye, Pencil, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
@@ -60,15 +60,10 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   // Input tab state
   const [activeInputTab, setActiveInputTab] = useState('upload');
   
-  // Paste content state
-  const [pasteTitle, setPasteTitle] = useState('');
-  const [pasteContent, setPasteContent] = useState('');
-  const [savingPaste, setSavingPaste] = useState(false);
-  
-  // Type info state
-  const [typeTitle, setTypeTitle] = useState('');
-  const [typeContent, setTypeContent] = useState('');
-  const [savingType, setSavingType] = useState(false);
+  // Note content state (combined paste/type)
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   
   // Voice note state
   const [voiceTitle, setVoiceTitle] = useState('');
@@ -352,45 +347,26 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
     return doc;
   };
 
-  const handlePasteSubmit = async () => {
-    if (!pasteTitle.trim() || !pasteContent.trim()) {
+  const handleNoteSubmit = async () => {
+    if (!noteTitle.trim() || !noteContent.trim()) {
       toast({ title: 'Error', description: 'Please enter a title and content', variant: 'destructive' });
       return;
     }
 
-    setSavingPaste(true);
+    setSavingNote(true);
     try {
-      const doc = await saveNote(pasteTitle, pasteContent);
+      const doc = await saveNote(noteTitle, noteContent);
       setDocuments(prev => [doc, ...prev]);
-      setPasteTitle('');
-      setPasteContent('');
-      toast({ title: 'Content added', description: `"${doc.filename}" has been added` });
+      setNoteTitle('');
+      setNoteContent('');
+      toast({ title: 'Note added', description: `"${doc.filename}" has been added` });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save content', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to save note', variant: 'destructive' });
     } finally {
-      setSavingPaste(false);
+      setSavingNote(false);
     }
   };
 
-  const handleTypeSubmit = async () => {
-    if (!typeTitle.trim() || !typeContent.trim()) {
-      toast({ title: 'Error', description: 'Please enter a title and content', variant: 'destructive' });
-      return;
-    }
-
-    setSavingType(true);
-    try {
-      const doc = await saveNote(typeTitle, typeContent);
-      setDocuments(prev => [doc, ...prev]);
-      setTypeTitle('');
-      setTypeContent('');
-      toast({ title: 'Info added', description: `"${doc.filename}" has been added` });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save info', variant: 'destructive' });
-    } finally {
-      setSavingType(false);
-    }
-  };
 
   const handleVoiceSubmit = async () => {
     if (!voiceTitle.trim() || !voiceTranscript.trim()) {
@@ -561,18 +537,14 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
         </CardHeader>
         <CardContent>
           <Tabs value={activeInputTab} onValueChange={setActiveInputTab}>
-            <TabsList className="grid w-full grid-cols-4 mb-4">
+            <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="upload" className="text-xs sm:text-sm">
                 <Upload className="w-4 h-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Upload</span>
               </TabsTrigger>
-              <TabsTrigger value="paste" className="text-xs sm:text-sm">
-                <ClipboardPaste className="w-4 h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">Paste</span>
-              </TabsTrigger>
-              <TabsTrigger value="type" className="text-xs sm:text-sm">
+              <TabsTrigger value="note" className="text-xs sm:text-sm">
                 <PenLine className="w-4 h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">Type</span>
+                <span className="hidden sm:inline">Note</span>
               </TabsTrigger>
               <TabsTrigger value="voice" className="text-xs sm:text-sm">
                 <Mic className="w-4 h-4 mr-1 sm:mr-2" />
@@ -606,35 +578,19 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               </div>
             </TabsContent>
 
-            {/* Paste Tab */}
-            <TabsContent value="paste" className="mt-0 space-y-4">
+            {/* Note Tab (combined paste/type) */}
+            <TabsContent value="note" className="mt-0 space-y-4">
               <div className="space-y-2">
                 <Label>Title</Label>
-                <Input placeholder="e.g., Company FAQ" value={pasteTitle} onChange={(e) => setPasteTitle(e.target.value)} />
+                <Input placeholder="e.g., Company FAQ, Contact Info" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Paste your content</Label>
-                <Textarea placeholder="Paste text content here..." value={pasteContent} onChange={(e) => setPasteContent(e.target.value)} rows={6} />
+                <Label>Content</Label>
+                <Textarea placeholder="Type or paste your content here..." value={noteContent} onChange={(e) => setNoteContent(e.target.value)} rows={6} />
               </div>
-              <Button onClick={handlePasteSubmit} disabled={savingPaste || !pasteTitle.trim() || !pasteContent.trim()} className="w-full gradient-primary text-primary-foreground">
-                {savingPaste && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Add Content
-              </Button>
-            </TabsContent>
-
-            {/* Type Tab */}
-            <TabsContent value="type" className="mt-0 space-y-4">
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input placeholder="e.g., Contact Info, About Us" value={typeTitle} onChange={(e) => setTypeTitle(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Information</Label>
-                <Textarea placeholder="Type your information here..." value={typeContent} onChange={(e) => setTypeContent(e.target.value)} rows={6} />
-              </div>
-              <Button onClick={handleTypeSubmit} disabled={savingType || !typeTitle.trim() || !typeContent.trim()} className="w-full gradient-primary text-primary-foreground">
-                {savingType && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Add Info
+              <Button onClick={handleNoteSubmit} disabled={savingNote || !noteTitle.trim() || !noteContent.trim()} className="w-full gradient-primary text-primary-foreground">
+                {savingNote && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Add Note
               </Button>
             </TabsContent>
 
