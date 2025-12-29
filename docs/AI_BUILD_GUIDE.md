@@ -337,10 +337,12 @@ CRITICAL RULES:
 ### Model Selection Flow
 
 1. Owner selects model in Space → AI Settings section
-2. Model saved to `spaces.ai_model`
+2. Model saved to `spaces.ai_model` with visual confirmation ("Model saved" indicator)
 3. `public-chat` reads model when handling chat
 4. Model recorded in `chat_messages.ai_model` for tracking
 5. Analytics displays model usage breakdown
+
+**Implementation Note**: Uses `initialModelLoadedRef` to prevent model reset during component re-renders (e.g., voice recording state changes).
 
 ---
 
