@@ -36,6 +36,7 @@ interface Document {
   id: string;
   filename: string;
   file_type: string;
+  file_path: string | null;
   status: DocumentStatus;
   error_message: string | null;
   created_at: string;
@@ -89,6 +90,8 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   
   // AI instructions section open state
   const [aiSectionOpen, setAiSectionOpen] = useState(true);
@@ -770,9 +773,27 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => {
+                      onClick={async () => {
                         setSelectedDoc(doc);
+                        setFilePreviewUrl(null);
                         setViewDocDialog(true);
+                        
+                        // If it's a file (PDF/image), get the signed URL
+                        if (doc.file_path && (doc.file_type === 'pdf' || doc.file_type === 'image')) {
+                          setLoadingPreview(true);
+                          try {
+                            const { data } = await supabase.storage
+                              .from('documents')
+                              .createSignedUrl(doc.file_path, 3600); // 1 hour expiry
+                            if (data?.signedUrl) {
+                              setFilePreviewUrl(data.signedUrl);
+                            }
+                          } catch (error) {
+                            console.error('Failed to get preview URL:', error);
+                          } finally {
+                            setLoadingPreview(false);
+                          }
+                        }
                       }}
                     >
                       <Eye className="w-4 h-4" />
@@ -813,8 +834,13 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
       </div>
 
       {/* View Document Dialog */}
-      <Dialog open={viewDocDialog} onOpenChange={setViewDocDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+      <Dialog open={viewDocDialog} onOpenChange={(open) => {
+        setViewDocDialog(open);
+        if (!open) {
+          setFilePreviewUrl(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh]">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
               {selectedDoc && getFileIcon(selectedDoc.file_type)}
@@ -824,15 +850,56 @@ export default function SpaceDocumentsTab({ spaceId, description }: SpaceDocumen
               {selectedDoc?.file_type === 'note' ? 'Text content' : `${selectedDoc?.file_type.toUpperCase()} file`}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[50vh]">
-            {selectedDoc?.content_text ? (
+          <ScrollArea className="max-h-[60vh]">
+            {loadingPreview ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading preview...</span>
+              </div>
+            ) : selectedDoc?.content_text ? (
               <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm">
                 {selectedDoc.content_text}
               </div>
+            ) : selectedDoc?.file_type === 'image' && filePreviewUrl ? (
+              <div className="flex justify-center p-4">
+                <img 
+                  src={filePreviewUrl} 
+                  alt={selectedDoc.filename}
+                  className="max-w-full max-h-[50vh] object-contain rounded-lg border"
+                />
+              </div>
+            ) : selectedDoc?.file_type === 'pdf' && filePreviewUrl ? (
+              <div className="w-full h-[55vh]">
+                <iframe
+                  src={filePreviewUrl}
+                  className="w-full h-full rounded-lg border"
+                  title={selectedDoc.filename}
+                />
+              </div>
             ) : (
-              <p className="text-muted-foreground text-center py-8">
-                No preview available for this file type
-              </p>
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">
+                  Preview not available
+                </p>
+                {selectedDoc?.file_path && (
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (selectedDoc?.file_path) {
+                        const { data } = await supabase.storage
+                          .from('documents')
+                          .createSignedUrl(selectedDoc.file_path, 3600);
+                        if (data?.signedUrl) {
+                          window.open(data.signedUrl, '_blank');
+                        }
+                      }
+                    }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open in new tab
+                  </Button>
+                )}
+              </div>
             )}
           </ScrollArea>
         </DialogContent>
