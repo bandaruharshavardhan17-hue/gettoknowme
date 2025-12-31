@@ -1,5 +1,5 @@
 /**
- * Know Me - Application Constants
+ * Speak2MyAI - Application Constants
  * 
  * Centralized configuration values and constants.
  * Avoid magic numbers and strings scattered throughout the codebase.

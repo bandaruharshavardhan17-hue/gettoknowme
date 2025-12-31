@@ -20,7 +20,7 @@ export default function Index() {
           </div>
           
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold mb-6 animate-fade-in" style={{ animationDelay: '100ms' }}>
-            Share What You <span className="gradient-text">Know</span>
+            <span className="gradient-text">Speak2MyAI</span>
           </h1>
           
           <p className="text-lg sm:text-xl text-muted-foreground mb-8 animate-fade-in" style={{ animationDelay: '200ms' }}>
