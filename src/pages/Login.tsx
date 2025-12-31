@@ -172,7 +172,7 @@ export default function Login() {
             <Sparkles className="w-8 h-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-3xl font-display gradient-text">
-            Know Me
+            Speak2MyAI
           </CardTitle>
           <CardDescription className="text-base">
             {isLogin 

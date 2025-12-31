@@ -73,7 +73,7 @@ export default function OwnerDashboard() {
             <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shadow-md">
               <Sparkles className="w-4 h-4 text-primary-foreground" />
             </div>
-            <h1 className="text-lg font-display font-bold gradient-text">Know Me</h1>
+            <h1 className="text-lg font-display font-bold gradient-text">Speak2MyAI</h1>
           </div>
           
           <div className="flex items-center gap-2">
