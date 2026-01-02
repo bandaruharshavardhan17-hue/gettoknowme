@@ -132,6 +132,20 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  // Fetch user's display name for placeholder
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.display_name) setDisplayName(data.display_name);
+      });
+  }, [user?.id]);
   
   const { isRecording, isProcessing, toggleRecording } = useVoiceRecording({
     onTranscript: (text) => {
@@ -960,7 +974,7 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
               <div className="space-y-2">
                 <Label>Fallback Response</Label>
                 <Textarea
-                  placeholder="e.g., I'm sorry, I don't have information about that. Please contact us at support@company.com for more help."
+                  placeholder={`Default response: Please reach out to ${displayName || 'the owner'} for more details.`}
                   value={aiInstructions}
                   onChange={(e) => handleInstructionsChange(e.target.value)}
                   rows={3}
