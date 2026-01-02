@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -102,8 +103,9 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   
   // Share link state
   const [creatingLink, setCreatingLink] = useState(false);
-  const [existingLinkToken, setExistingLinkToken] = useState<string | null>(null);
+  const [existingLink, setExistingLink] = useState<{ id: string; token: string; revoked: boolean } | null>(null);
   const [loadingLink, setLoadingLink] = useState(true);
+  const [togglingLink, setTogglingLink] = useState(false);
   
   // QR code dialog state
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
@@ -151,21 +153,49 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
 
   const fetchExistingLink = async () => {
     try {
+      // Fetch the first share link for this space (regardless of revoked status)
       const { data } = await supabase
         .from('share_links')
-        .select('token')
+        .select('id, token, revoked')
         .eq('space_id', spaceId)
-        .eq('revoked', false)
         .limit(1)
         .single();
 
       if (data) {
-        setExistingLinkToken(data.token);
+        setExistingLink(data);
       }
     } catch {
       // No existing link
     } finally {
       setLoadingLink(false);
+    }
+  };
+
+  const handleToggleLinkEnabled = async () => {
+    if (!existingLink) return;
+    
+    setTogglingLink(true);
+    const newRevoked = !existingLink.revoked;
+    
+    try {
+      const { error } = await supabase
+        .from('share_links')
+        .update({ revoked: newRevoked })
+        .eq('id', existingLink.id);
+
+      if (error) throw error;
+
+      setExistingLink(prev => prev ? { ...prev, revoked: newRevoked } : null);
+      toast({
+        title: newRevoked ? 'Link disabled' : 'Link enabled',
+        description: newRevoked 
+          ? 'Visitors will see an error when accessing this link' 
+          : 'Link is now active and accessible',
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update link', variant: 'destructive' });
+    } finally {
+      setTogglingLink(false);
     }
   };
 
@@ -640,7 +670,7 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
 
       if (error) throw error;
 
-      setExistingLinkToken(data.token);
+      setExistingLink({ id: data.id, token: data.token, revoked: false });
       toast({ title: 'Chat link created!', description: 'Your shareable chat link is ready' });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to create chat link', variant: 'destructive' });
@@ -675,17 +705,53 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
           <div className="flex items-center gap-2 px-3 py-2">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           </div>
-        ) : existingLinkToken ? (
-          <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-3 py-2">
-            <Link className="w-4 h-4 text-success" />
-            <span className="text-sm font-medium text-success">Chat Link</span>
-            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copyLink(existingLinkToken)}>
+        ) : existingLink ? (
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+            existingLink.revoked 
+              ? 'bg-destructive/10 border border-destructive/30' 
+              : 'bg-success/10 border border-success/30'
+          }`}>
+            <Link className={`w-4 h-4 ${existingLink.revoked ? 'text-destructive' : 'text-success'}`} />
+            <span className={`text-sm font-medium ${existingLink.revoked ? 'text-destructive' : 'text-success'}`}>
+              {existingLink.revoked ? 'Disabled' : 'Chat Link'}
+            </span>
+            
+            {/* Enable/Disable Toggle */}
+            <Switch
+              checked={!existingLink.revoked}
+              onCheckedChange={handleToggleLinkEnabled}
+              disabled={togglingLink}
+              className="ml-1"
+            />
+            
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-7 px-2" 
+              onClick={() => copyLink(existingLink.token)}
+              disabled={existingLink.revoked}
+              title={existingLink.revoked ? 'Enable link to copy' : 'Copy link'}
+            >
               <Copy className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setQrDialogOpen(true)} title="Show QR Code">
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-7 px-2" 
+              onClick={() => setQrDialogOpen(true)} 
+              title={existingLink.revoked ? 'Enable link to show QR' : 'Show QR Code'}
+              disabled={existingLink.revoked}
+            >
               <QrCode className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => openLink(existingLinkToken)}>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-7 px-2" 
+              onClick={() => openLink(existingLink.token)}
+              disabled={existingLink.revoked}
+              title={existingLink.revoked ? 'Enable link to open' : 'Open link'}
+            >
               <ExternalLink className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -1210,11 +1276,11 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
       </Dialog>
 
       {/* QR Code Dialog */}
-      {existingLinkToken && (
+      {existingLink && !existingLink.revoked && (
         <QRCodeDialog
           open={qrDialogOpen}
           onOpenChange={setQrDialogOpen}
-          url={`${window.location.origin}/chat/${existingLinkToken}`}
+          url={`${window.location.origin}/chat/${existingLink.token}`}
           title="Share Chat Link"
         />
       )}
