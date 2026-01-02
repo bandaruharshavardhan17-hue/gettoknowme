@@ -90,10 +90,13 @@ Deno.serve(async (req) => {
       });
 
       if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error('This website blocks automated access. Try a different URL or copy the content manually.');
+        if (response.status === 403 || response.status === 401) {
+          throw new Error('This website blocks external access. Enhanced scraping support is coming soon—please report this issue or copy the content manually for now.');
         }
-        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        if (response.status === 404) {
+          throw new Error('Page not found. Please check the URL is correct.');
+        }
+        throw new Error(`Unable to access this page (${response.status}). Please try a different URL or report this issue.`);
       }
 
       const html = await response.text();
