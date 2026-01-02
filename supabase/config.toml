@@ -36,3 +36,6 @@ verify_jwt = false
 
 [functions.api-admin]
 verify_jwt = false
+
+[functions.scrape-url]
+verify_jwt = false
