@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Eye, Link2, TrendingUp, Clock, Cpu, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getModelLabel } from '@/lib/modelUtils';
 
 interface LinkAnalytics {
   id: string;
@@ -185,8 +186,8 @@ export default function SpaceAnalyticsTab({ spaceId }: SpaceAnalyticsTabProps) {
                   key={usage.model}
                   className="flex items-center gap-2 p-3 rounded-lg bg-muted/50"
                 >
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {usage.model}
+                  <Badge variant="secondary" className="text-xs">
+                    {getModelLabel(usage.model)}
                   </Badge>
                   <span className="text-sm font-medium">{usage.count}</span>
                   <span className="text-xs text-muted-foreground">responses</span>
