@@ -3,10 +3,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Shield, Users, FolderOpen, MessageSquare } from 'lucide-react';
+import { LogOut, Shield, Users, FolderOpen, MessageSquare, AlertCircle, Lightbulb } from 'lucide-react';
 import { AdminUsersTab } from './AdminUsersTab';
 import { AdminSpacesTab } from './AdminSpacesTab';
 import { AdminChatsTab } from './AdminChatsTab';
+import { AdminIssuesTab } from './AdminIssuesTab';
+import { AdminFeedbackTab } from './AdminFeedbackTab';
+import { AdminSummaryCards } from './AdminSummaryCards';
 
 export default function AdminDashboard() {
   const { signOut } = useAuth();
@@ -55,19 +58,30 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* Summary Cards */}
+        <AdminSummaryCards />
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-5">
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Users
+              <span className="hidden sm:inline">Users</span>
             </TabsTrigger>
             <TabsTrigger value="spaces" className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4" />
-              Spaces
+              <span className="hidden sm:inline">Spaces</span>
             </TabsTrigger>
             <TabsTrigger value="chats" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
-              Chats
+              <span className="hidden sm:inline">Chats</span>
+            </TabsTrigger>
+            <TabsTrigger value="issues" className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Issues</span>
+            </TabsTrigger>
+            <TabsTrigger value="feedback" className="flex items-center gap-2">
+              <Lightbulb className="h-4 w-4" />
+              <span className="hidden sm:inline">Feedback</span>
             </TabsTrigger>
           </TabsList>
 
@@ -81,6 +95,14 @@ export default function AdminDashboard() {
 
           <TabsContent value="chats">
             <AdminChatsTab />
+          </TabsContent>
+
+          <TabsContent value="issues">
+            <AdminIssuesTab />
+          </TabsContent>
+
+          <TabsContent value="feedback">
+            <AdminFeedbackTab />
           </TabsContent>
         </Tabs>
       </main>
