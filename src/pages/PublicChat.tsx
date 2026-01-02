@@ -169,12 +169,25 @@ export default function PublicChat() {
       });
 
       if (error) throw error;
+      
+      // Check if link is disabled (403 from backend)
+      if (data.disabled) {
+        setError('This link has been disabled by the owner.');
+        setLoading(false);
+        return;
+      }
+      
       if (!data.valid) throw new Error(data.message || 'Invalid or expired link');
 
       setSpaceInfo(data.space);
       setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat');
+    } catch (err: any) {
+      // Handle the disabled case from error response
+      if (err?.message?.includes('disabled') || err?.context?.body?.includes('disabled')) {
+        setError('This link has been disabled by the owner.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load chat');
+      }
       setLoading(false);
     }
   };
@@ -520,15 +533,25 @@ export default function PublicChat() {
   }
 
   if (error) {
+    const isDisabled = error.includes('disabled');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-accent/20 p-4">
         <Card className="max-w-md w-full">
           <CardContent className="flex flex-col items-center py-12">
-            <div className="w-16 h-16 rounded-2xl bg-destructive/20 flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-destructive" />
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${
+              isDisabled ? 'bg-amber-500/20' : 'bg-destructive/20'
+            }`}>
+              <AlertCircle className={`w-8 h-8 ${isDisabled ? 'text-amber-600' : 'text-destructive'}`} />
             </div>
-            <h2 className="text-xl font-display font-bold mb-2">Link Unavailable</h2>
-            <p className="text-muted-foreground text-center">{error}</p>
+            <h2 className="text-xl font-display font-bold mb-2">
+              {isDisabled ? 'Link Disabled' : 'Link Unavailable'}
+            </h2>
+            <p className="text-muted-foreground text-center mb-4">{error}</p>
+            {isDisabled && (
+              <p className="text-sm text-muted-foreground text-center">
+                The owner of this knowledge base has temporarily disabled this link.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
