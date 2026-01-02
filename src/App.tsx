@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import OwnerDashboard from "./pages/owner/OwnerDashboard";
 import SpaceDetail from "./pages/owner/SpaceDetail";
 import ShareSpace from "./pages/owner/ShareSpace";
+import ProfileSettings from "./pages/owner/ProfileSettings";
 import TestRunner from "./pages/owner/TestRunner";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import PublicChat from "./pages/PublicChat";
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/owner/spaces" element={<ProtectedRoute><OwnerDashboard /></ProtectedRoute>} />
               <Route path="/owner/spaces/:spaceId" element={<ProtectedRoute><SpaceDetail /></ProtectedRoute>} />
               <Route path="/owner/spaces/:spaceId/share" element={<ProtectedRoute><ShareSpace /></ProtectedRoute>} />
+              <Route path="/owner/profile" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
               <Route path="/owner/test" element={<ProtectedRoute><TestRunner /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
               <Route path="/s/:token" element={<PublicChat />} />
