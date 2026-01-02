@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, User, Bot, MessageSquare, Cpu } from 'lucide-react';
 import { format } from 'date-fns';
+import { getModelLabel } from '@/lib/modelUtils';
 
 interface ChatMessage {
   id: string;
@@ -175,7 +176,7 @@ export default function SpaceChatHistoryTab({ spaceId }: SpaceChatHistoryTabProp
                           {msg.role === 'assistant' && msg.ai_model && (
                             <Badge variant="outline" className="text-[10px] py-0 h-4 gap-1">
                               <Cpu className="w-2.5 h-2.5" />
-                              {msg.ai_model}
+                              {getModelLabel(msg.ai_model)}
                             </Badge>
                           )}
                         </div>
