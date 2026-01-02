@@ -78,6 +78,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
   const [errors, setErrors] = useState<{ displayName?: string; email?: string; password?: string; confirmPassword?: string }>({});
   
   const { signIn, signUp, user, loading: authLoading } = useAuth();
@@ -489,19 +490,24 @@ export default function Login() {
             <p className="text-sm font-medium text-muted-foreground mb-3 text-center">Contact Developer</p>
             <div className="space-y-2 text-sm">
               <a
-                href="mailto:bandaru.harshavardhan17@gmail.com"
+                href="mailto:harsha@speak2myai.com"
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center"
               >
                 <Mail className="w-4 h-4" />
-                <span>bandaru.harshavardhan17@gmail.com</span>
+                <span>harsha@speak2myai.com</span>
               </a>
-              <a
-                href="tel:+16317100432"
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center"
+              <button
+                type="button"
+                onClick={() => setShowPhone(!showPhone)}
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center w-full"
               >
                 <Phone className="w-4 h-4" />
-                <span>+1 631-710-0432</span>
-              </a>
+                {showPhone ? (
+                  <a href="tel:+16317100432" className="hover:underline">+1 631-710-0432</a>
+                ) : (
+                  <span>Show phone number</span>
+                )}
+              </button>
               <a
                 href="https://www.linkedin.com/in/bandaruharshavardhan17/"
                 target="_blank"
