@@ -60,10 +60,10 @@ interface SpaceDocumentsTabProps {
 }
 
 const AI_MODELS = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast & affordable' },
-  { value: 'gpt-4o', label: 'GPT-4o', description: 'Most capable' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'High performance' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Economy option' },
+  { value: 'gpt-4o-mini', label: 'Fast', description: 'Quick responses' },
+  { value: 'gpt-4o', label: 'Pro', description: 'Most capable' },
+  { value: 'gpt-4-turbo', label: 'Balanced', description: 'High performance' },
+  { value: 'gpt-3.5-turbo', label: 'Economy', description: 'Cost effective' },
 ];
 
 export default function SpaceDocumentsTab({ spaceId, description, aiModel }: SpaceDocumentsTabProps) {
@@ -520,9 +520,15 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
       if (error) throw error;
 
       if (data?.error) {
-        // Check for login required error
-        if (data.error.startsWith('LOGIN_REQUIRED')) {
-          setFeedbackMessage(`Unable to scrape ${urlInput} - the page requires login. Please request support for this URL.`);
+        // Check for blocked access, login required, or report this issue messages
+        const errorLower = data.error.toLowerCase();
+        if (
+          data.error.startsWith('LOGIN_REQUIRED') || 
+          errorLower.includes('blocks external access') ||
+          errorLower.includes('requires login') ||
+          errorLower.includes('report this issue')
+        ) {
+          setFeedbackMessage(`Unable to scrape ${urlInput} - ${data.error}\n\nPlease request support for this URL or copy the content manually.`);
           setFeedbackOpen(true);
           return;
         }

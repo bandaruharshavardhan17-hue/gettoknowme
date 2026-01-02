@@ -73,7 +73,7 @@ serve(async (req) => {
     // Now fetch full share link data with space info (only for non-revoked links)
     const { data: shareLink, error: linkError } = await supabase
       .from('share_links')
-      .select('*, spaces(id, name, description, openai_vector_store_id, ai_model)')
+      .select('*, spaces(id, name, description, openai_vector_store_id, ai_model, owner_id)')
       .eq('token', token)
       .eq('revoked', false)
       .single();
@@ -119,14 +119,27 @@ serve(async (req) => {
 
       const vectorStoreId = shareLink.spaces.openai_vector_store_id;
       const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
+      const ownerId = shareLink.spaces.owner_id;
 
-      const defaultFallback = "I don't have that information in the provided documents.";
+      // Fetch owner's display name for personalized fallback
+      let ownerName = 'the owner';
+      if (ownerId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', ownerId)
+          .single();
+        if (profile?.display_name) {
+          ownerName = profile.display_name;
+        }
+      }
+
+      // Build personalized fallback response
+      const defaultFallback = `I don't have that information in the provided documents. Please reach out to ${ownerName} for more details.`;
       const ownerInstructions = shareLink.spaces.description || defaultFallback;
 
       console.log('Using vector store:', vectorStoreId || 'none (using local content)');
       console.log('Space ID:', shareLink.spaces.id);
-
-      console.log('Using vector store:', vectorStoreId);
 
       // Get document content from our database as fallback/supplement
       const { data: documents } = await supabase
