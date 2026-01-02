@@ -144,6 +144,54 @@ export type Database = {
           },
         ]
       }
+      issue_reports: {
+        Row: {
+          app_version: string | null
+          build_number: string | null
+          context: string
+          created_at: string
+          device_model: string | null
+          email: string | null
+          id: string
+          is_offline: boolean | null
+          message: string
+          resolved: boolean | null
+          screen: string | null
+          system_version: string | null
+          user_id: string | null
+        }
+        Insert: {
+          app_version?: string | null
+          build_number?: string | null
+          context: string
+          created_at?: string
+          device_model?: string | null
+          email?: string | null
+          id?: string
+          is_offline?: boolean | null
+          message: string
+          resolved?: boolean | null
+          screen?: string | null
+          system_version?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          app_version?: string | null
+          build_number?: string | null
+          context?: string
+          created_at?: string
+          device_model?: string | null
+          email?: string | null
+          id?: string
+          is_offline?: boolean | null
+          message?: string
+          resolved?: boolean | null
+          screen?: string | null
+          system_version?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
