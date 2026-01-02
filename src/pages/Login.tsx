@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, Eye, EyeOff, User, ArrowLeft, Phone, Info, MessageCircle } from 'lucide-react';
+import { Loader2, Mail, Lock, Eye, EyeOff, User, ArrowLeft, Phone, Info, MessageCircle, Linkedin } from 'lucide-react';
 import { z } from 'zod';
 import { AppLogo } from '@/components/AppLogo';
 import { FeedbackModal } from '@/components/FeedbackModal';
@@ -175,7 +175,7 @@ export default function Login() {
           setMode('login');
         }
       } else if (mode === 'login') {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(email, password, rememberMe);
         if (error) {
           let message = error.message;
           if (message.includes('Invalid login credentials')) {
@@ -481,6 +481,36 @@ export default function Login() {
                 <MessageCircle className="w-3 h-3" />
                 Share feedback / report a problem
               </button>
+            </div>
+          </div>
+
+          {/* Contact Developer Section */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <p className="text-sm font-medium text-muted-foreground mb-3 text-center">Contact Developer</p>
+            <div className="space-y-2 text-sm">
+              <a
+                href="mailto:bandaru.harshavardhan17@gmail.com"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center"
+              >
+                <Mail className="w-4 h-4" />
+                <span>bandaru.harshavardhan17@gmail.com</span>
+              </a>
+              <a
+                href="tel:+16317100432"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center"
+              >
+                <Phone className="w-4 h-4" />
+                <span>+1 631-710-0432</span>
+              </a>
+              <a
+                href="https://www.linkedin.com/in/bandaruharshavardhan17/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors justify-center"
+              >
+                <Linkedin className="w-4 h-4" />
+                <span>LinkedIn Profile</span>
+              </a>
             </div>
           </div>
         </CardContent>

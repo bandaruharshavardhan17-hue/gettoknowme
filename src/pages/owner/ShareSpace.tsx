@@ -11,8 +11,14 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Link2, Copy, Trash2, Loader2, Plus, 
   CheckCircle, XCircle, ExternalLink, Share2, QrCode, Pencil,
-  AlertTriangle
+  AlertTriangle, Eye, Clock, ShieldOff
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 
 interface ShareLink {
@@ -21,6 +27,8 @@ interface ShareLink {
   name: string | null;
   revoked: boolean;
   created_at: string;
+  view_count: number;
+  last_used_at: string | null;
 }
 
 interface Space {
@@ -52,6 +60,23 @@ export default function ShareSpace() {
   useEffect(() => {
     fetchSpaceAndLinks();
   }, [spaceId]);
+
+  // Format relative time (e.g., "2h ago", "3d ago")
+  const formatRelativeTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+    
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return date.toLocaleDateString();
+  };
 
   const fetchSpaceAndLinks = async () => {
     try {
@@ -379,9 +404,19 @@ export default function ShareSpace() {
                           <Pencil className="w-3 h-3" />
                         </Button>
                         {link.revoked ? (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive font-medium">
-                            Disabled
-                          </span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive font-medium inline-flex items-center gap-1 cursor-help">
+                                  <ShieldOff className="w-3 h-3" />
+                                  Disabled
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>No AI resources will be used. Visitors see an error.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success font-medium">
                             Active
@@ -442,9 +477,19 @@ export default function ShareSpace() {
                         </Button>
                       </div>
 
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Created {new Date(link.created_at).toLocaleDateString()}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
+                        <span>Created {new Date(link.created_at).toLocaleDateString()}</span>
+                        <span className="flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          {link.view_count} view{link.view_count !== 1 ? 's' : ''}
+                        </span>
+                        {link.last_used_at && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Last used {formatRelativeTime(link.last_used_at)}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-3 shrink-0">

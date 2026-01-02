@@ -10,8 +10,9 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { WaveformIndicator } from '@/components/WaveformIndicator';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
-  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw
+  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw, MessageCircle
 } from 'lucide-react';
+import { FeedbackModal, FeedbackContext } from '@/components/FeedbackModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,6 +113,9 @@ export default function PublicChat() {
   const [retryAttempt, setRetryAttempt] = useState(0);
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [processingQueue, setProcessingQueue] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState<FeedbackContext>('public_chat_error');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
   
   const isOnline = useOnlineStatus();
   
@@ -548,12 +552,33 @@ export default function PublicChat() {
             </h2>
             <p className="text-muted-foreground text-center mb-4">{error}</p>
             {isDisabled && (
-              <p className="text-sm text-muted-foreground text-center">
+              <p className="text-sm text-muted-foreground text-center mb-4">
                 The owner of this knowledge base has temporarily disabled this link.
               </p>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setFeedbackContext('public_chat_error');
+                setFeedbackMessage(`Error: ${error}`);
+                setFeedbackOpen(true);
+              }}
+              className="mt-2"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Report Issue
+            </Button>
           </CardContent>
         </Card>
+        
+        <FeedbackModal
+          open={feedbackOpen}
+          onOpenChange={setFeedbackOpen}
+          defaultContext={feedbackContext}
+          defaultMessage={feedbackMessage}
+          screenName="PublicChat"
+        />
       </div>
     );
   }
@@ -562,7 +587,7 @@ export default function PublicChat() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-accent/10">
       {/* Offline Banner */}
       {!isOnline && (
-        <div className="bg-amber-500/90 text-amber-950 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
+        <div className="bg-amber-500/90 text-amber-950 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium flex-wrap">
           <WifiOff className="w-4 h-4" />
           <span>
             You're offline.
@@ -573,6 +598,18 @@ export default function PublicChat() {
             )}
             {messageQueue.length === 0 && ' Messages will be queued until you reconnect.'}
           </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setFeedbackContext('public_chat_offline');
+              setFeedbackMessage('I was offline while using the chat.');
+              setFeedbackOpen(true);
+            }}
+            className="h-6 px-2 text-xs bg-amber-600/20 hover:bg-amber-600/30 text-amber-950"
+          >
+            Report Issue
+          </Button>
         </div>
       )}
       
@@ -913,6 +950,15 @@ export default function PublicChat() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Feedback Modal */}
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        defaultContext={feedbackContext}
+        defaultMessage={feedbackMessage}
+        screenName="PublicChat"
+      />
     </div>
   );
 }
