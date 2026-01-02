@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Link2, Copy, Trash2, Loader2, Plus, 
   CheckCircle, XCircle, ExternalLink, Share2, QrCode, Pencil,
-  AlertTriangle, Eye, Clock, ShieldOff
+  AlertTriangle, Eye, Clock, ShieldOff, CalendarClock, Timer
 } from 'lucide-react';
 import {
   Tooltip,
@@ -29,6 +29,7 @@ interface ShareLink {
   created_at: string;
   view_count: number;
   last_used_at: string | null;
+  expires_at: string | null;
 }
 
 interface Space {
@@ -55,6 +56,11 @@ export default function ShareSpace() {
   const [editName, setEditName] = useState('');
   const [savingName, setSavingName] = useState(false);
   
+  // Expiration state
+  const [expirationDialogOpen, setExpirationDialogOpen] = useState(false);
+  const [expirationLink, setExpirationLink] = useState<ShareLink | null>(null);
+  const [savingExpiration, setSavingExpiration] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -76,6 +82,31 @@ export default function ShareSpace() {
     if (diffHour < 24) return `${diffHour}h ago`;
     if (diffDay < 7) return `${diffDay}d ago`;
     return date.toLocaleDateString();
+  };
+
+  // Format future relative time (e.g., "in 3 days")
+  const formatFutureTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 'Expired';
+    
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+    
+    if (diffMin < 60) return `in ${diffMin}m`;
+    if (diffHour < 24) return `in ${diffHour}h`;
+    if (diffDay < 7) return `in ${diffDay}d`;
+    return date.toLocaleDateString();
+  };
+
+  // Check if link is expired
+  const isLinkExpired = (link: ShareLink): boolean => {
+    if (!link.expires_at) return false;
+    return new Date(link.expires_at) < new Date();
   };
 
   const fetchSpaceAndLinks = async () => {
@@ -148,6 +179,15 @@ export default function ShareSpace() {
       toast({
         title: 'Link disabled',
         description: 'Enable the link first to copy it',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (isLinkExpired(link)) {
+      toast({
+        title: 'Link expired',
+        description: 'This link has expired and cannot be shared',
         variant: 'destructive',
       });
       return;
@@ -261,11 +301,60 @@ export default function ShareSpace() {
     }
   };
 
+  const handleSetExpiration = (link: ShareLink) => {
+    setExpirationLink(link);
+    setExpirationDialogOpen(true);
+  };
+
+  const handleSaveExpiration = async (expiresAt: string | null) => {
+    if (!expirationLink) return;
+    
+    setSavingExpiration(true);
+    try {
+      const { error } = await supabase
+        .from('share_links')
+        .update({ expires_at: expiresAt })
+        .eq('id', expirationLink.id);
+
+      if (error) throw error;
+
+      setShareLinks(prev =>
+        prev.map(l => l.id === expirationLink.id ? { ...l, expires_at: expiresAt } : l)
+      );
+
+      setExpirationDialogOpen(false);
+      setExpirationLink(null);
+
+      toast({
+        title: expiresAt ? 'Expiration set' : 'Expiration removed',
+        description: expiresAt 
+          ? `Link will expire on ${new Date(expiresAt).toLocaleDateString()}`
+          : 'Link will no longer expire',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update expiration',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingExpiration(false);
+    }
+  };
+
   const handleOpenLink = (link: ShareLink) => {
     if (link.revoked) {
       toast({
         title: 'Link disabled',
         description: 'Enable the link first to open it',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (isLinkExpired(link)) {
+      toast({
+        title: 'Link expired',
+        description: 'This link has expired',
         variant: 'destructive',
       });
       return;
@@ -376,16 +465,20 @@ export default function ShareSpace() {
             {shareLinks.map((link, index) => (
               <Card 
                 key={link.id} 
-                className={`animate-fade-in transition-all ${link.revoked ? 'opacity-60 bg-muted/30' : 'hover:border-primary/30'}`}
+                className={`animate-fade-in transition-all ${link.revoked || isLinkExpired(link) ? 'opacity-60 bg-muted/30' : 'hover:border-primary/30'}`}
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                      link.revoked ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'
+                      link.revoked ? 'bg-destructive/20 text-destructive' : 
+                      isLinkExpired(link) ? 'bg-amber-500/20 text-amber-600' :
+                      'bg-primary/20 text-primary'
                     }`}>
                       {link.revoked ? (
                         <AlertTriangle className="w-5 h-5" />
+                      ) : isLinkExpired(link) ? (
+                        <Timer className="w-5 h-5" />
                       ) : (
                         <Link2 className="w-5 h-5" />
                       )}
@@ -417,6 +510,34 @@ export default function ShareSpace() {
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                        ) : isLinkExpired(link) ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 font-medium inline-flex items-center gap-1 cursor-help">
+                                  <Timer className="w-3 h-3" />
+                                  Expired
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>This link expired on {new Date(link.expires_at!).toLocaleDateString()}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : link.expires_at ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-medium inline-flex items-center gap-1 cursor-help">
+                                  <CalendarClock className="w-3 h-3" />
+                                  Expires {formatFutureTime(link.expires_at)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Expires on {new Date(link.expires_at).toLocaleString()}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success font-medium">
                             Active
@@ -428,15 +549,15 @@ export default function ShareSpace() {
                         <Input
                           readOnly
                           value={`${window.location.origin}/s/${link.token}`}
-                          className={`text-sm font-mono ${link.revoked ? 'bg-muted text-muted-foreground' : 'bg-muted/50'}`}
+                          className={`text-sm font-mono ${link.revoked || isLinkExpired(link) ? 'bg-muted text-muted-foreground' : 'bg-muted/50'}`}
                         />
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => handleCopyLink(link)}
                           className="shrink-0"
-                          disabled={link.revoked}
-                          title={link.revoked ? 'Enable link to copy' : 'Copy link'}
+                          disabled={link.revoked || isLinkExpired(link)}
+                          title={link.revoked ? 'Enable link to copy' : isLinkExpired(link) ? 'Link expired' : 'Copy link'}
                         >
                           {copiedId === link.id ? (
                             <CheckCircle className="w-4 h-4 text-success" />
@@ -448,10 +569,10 @@ export default function ShareSpace() {
                           variant="outline"
                           size="icon"
                           onClick={() => {
-                            if (link.revoked) {
+                            if (link.revoked || isLinkExpired(link)) {
                               toast({
-                                title: 'Link disabled',
-                                description: 'Enable the link first to show QR code',
+                                title: link.revoked ? 'Link disabled' : 'Link expired',
+                                description: link.revoked ? 'Enable the link first to show QR code' : 'This link has expired',
                                 variant: 'destructive',
                               });
                               return;
@@ -460,8 +581,8 @@ export default function ShareSpace() {
                             setQrDialogOpen(true);
                           }}
                           className="shrink-0"
-                          disabled={link.revoked}
-                          title={link.revoked ? 'Enable link to show QR' : 'Show QR Code'}
+                          disabled={link.revoked || isLinkExpired(link)}
+                          title={link.revoked ? 'Enable link to show QR' : isLinkExpired(link) ? 'Link expired' : 'Show QR Code'}
                         >
                           <QrCode className="w-4 h-4" />
                         </Button>
@@ -470,8 +591,8 @@ export default function ShareSpace() {
                           size="icon" 
                           className="shrink-0"
                           onClick={() => handleOpenLink(link)}
-                          disabled={link.revoked}
-                          title={link.revoked ? 'Enable link to open' : 'Open link'}
+                          disabled={link.revoked || isLinkExpired(link)}
+                          title={link.revoked ? 'Enable link to open' : isLinkExpired(link) ? 'Link expired' : 'Open link'}
                         >
                           <ExternalLink className="w-4 h-4" />
                         </Button>
@@ -493,6 +614,18 @@ export default function ShareSpace() {
                     </div>
 
                     <div className="flex flex-col items-end gap-3 shrink-0">
+                      {/* Expiration Button */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSetExpiration(link)}
+                        className="text-muted-foreground hover:text-foreground h-7 px-2 text-xs"
+                        title="Set expiration"
+                      >
+                        <CalendarClock className="w-3 h-3 mr-1" />
+                        {link.expires_at ? 'Edit' : 'Set'} Expiry
+                      </Button>
+                      
                       {/* Enable/Disable Toggle */}
                       <div className="flex items-center gap-2">
                         <Label 
@@ -564,6 +697,93 @@ export default function ShareSpace() {
                 {savingName && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Save Name
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Set Expiration Dialog */}
+        <Dialog open={expirationDialogOpen} onOpenChange={setExpirationDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display">Set Link Expiration</DialogTitle>
+              <DialogDescription>
+                Choose when this link should expire. Expired links cannot be used.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="grid grid-cols-2 gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    const date = new Date();
+                    date.setDate(date.getDate() + 1);
+                    handleSaveExpiration(date.toISOString());
+                  }}
+                  disabled={savingExpiration}
+                >
+                  1 Day
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    const date = new Date();
+                    date.setDate(date.getDate() + 7);
+                    handleSaveExpiration(date.toISOString());
+                  }}
+                  disabled={savingExpiration}
+                >
+                  7 Days
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    const date = new Date();
+                    date.setDate(date.getDate() + 30);
+                    handleSaveExpiration(date.toISOString());
+                  }}
+                  disabled={savingExpiration}
+                >
+                  30 Days
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    const date = new Date();
+                    date.setFullYear(date.getFullYear() + 1);
+                    handleSaveExpiration(date.toISOString());
+                  }}
+                  disabled={savingExpiration}
+                >
+                  1 Year
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="customDate">Custom Date</Label>
+                <Input
+                  id="customDate"
+                  type="datetime-local"
+                  min={new Date().toISOString().slice(0, 16)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleSaveExpiration(new Date(e.target.value).toISOString());
+                    }
+                  }}
+                  disabled={savingExpiration}
+                />
+              </div>
+              
+              {expirationLink?.expires_at && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => handleSaveExpiration(null)}
+                  className="w-full text-muted-foreground"
+                  disabled={savingExpiration}
+                >
+                  {savingExpiration && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Remove Expiration
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>

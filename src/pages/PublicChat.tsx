@@ -10,7 +10,7 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { WaveformIndicator } from '@/components/WaveformIndicator';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
-  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw, MessageCircle
+  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw, MessageCircle, Copy, CheckCircle
 } from 'lucide-react';
 import { FeedbackModal, FeedbackContext } from '@/components/FeedbackModal';
 import {
@@ -116,7 +116,7 @@ export default function PublicChat() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackContext, setFeedbackContext] = useState<FeedbackContext>('public_chat_error');
   const [feedbackMessage, setFeedbackMessage] = useState('');
-  
+  const [copiedChat, setCopiedChat] = useState(false);
   const isOnline = useOnlineStatus();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -481,15 +481,8 @@ export default function PublicChat() {
     }
   };
 
-  const downloadChat = () => {
-    if (messages.length === 0) {
-      toast({
-        title: 'No messages',
-        description: 'Start a conversation first to download it.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  const getChatContent = () => {
+    if (messages.length === 0) return '';
 
     const chatContent = messages.map(m => {
       const role = m.role === 'user' ? 'You' : spaceInfo?.name || 'Assistant';
@@ -500,9 +493,21 @@ export default function PublicChat() {
       return text;
     }).join('\n\n---\n\n');
 
-    const header = `Chat with ${spaceInfo?.name || 'Knowledge Base'}\nDownloaded: ${new Date().toLocaleString()}\n\n${'='.repeat(50)}\n\n`;
-    const fullContent = header + chatContent;
+    const header = `Chat with ${spaceInfo?.name || 'Knowledge Base'}\nDate: ${new Date().toLocaleString()}\n\n${'='.repeat(50)}\n\n`;
+    return header + chatContent;
+  };
 
+  const downloadChat = () => {
+    if (messages.length === 0) {
+      toast({
+        title: 'No messages',
+        description: 'Start a conversation first to download it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const fullContent = getChatContent();
     const blob = new Blob([fullContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -516,6 +521,27 @@ export default function PublicChat() {
     toast({
       title: 'Chat downloaded',
       description: 'Your conversation has been saved.',
+    });
+  };
+
+  const copyChat = async () => {
+    if (messages.length === 0) {
+      toast({
+        title: 'No messages',
+        description: 'Start a conversation first to copy it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const fullContent = getChatContent();
+    await navigator.clipboard.writeText(fullContent);
+    setCopiedChat(true);
+    setTimeout(() => setCopiedChat(false), 2000);
+
+    toast({
+      title: 'Chat copied',
+      description: 'Conversation copied to clipboard.',
     });
   };
 
@@ -538,22 +564,28 @@ export default function PublicChat() {
 
   if (error) {
     const isDisabled = error.includes('disabled');
+    const isExpired = error.includes('expired');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-accent/20 p-4">
         <Card className="max-w-md w-full">
           <CardContent className="flex flex-col items-center py-12">
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${
-              isDisabled ? 'bg-amber-500/20' : 'bg-destructive/20'
+              isDisabled || isExpired ? 'bg-amber-500/20' : 'bg-destructive/20'
             }`}>
-              <AlertCircle className={`w-8 h-8 ${isDisabled ? 'text-amber-600' : 'text-destructive'}`} />
+              <AlertCircle className={`w-8 h-8 ${isDisabled || isExpired ? 'text-amber-600' : 'text-destructive'}`} />
             </div>
             <h2 className="text-xl font-display font-bold mb-2">
-              {isDisabled ? 'Link Disabled' : 'Link Unavailable'}
+              {isDisabled ? 'Link Disabled' : isExpired ? 'Link Expired' : 'Link Unavailable'}
             </h2>
             <p className="text-muted-foreground text-center mb-4">{error}</p>
             {isDisabled && (
               <p className="text-sm text-muted-foreground text-center mb-4">
                 The owner of this knowledge base has temporarily disabled this link.
+              </p>
+            )}
+            {isExpired && (
+              <p className="text-sm text-muted-foreground text-center mb-4">
+                This link is no longer valid. Contact the owner for a new link.
               </p>
             )}
             <Button
@@ -657,12 +689,40 @@ export default function PublicChat() {
             <Button
               variant="outline"
               size="sm"
+              onClick={copyChat}
+              disabled={messages.length === 0}
+              className="hidden sm:flex"
+            >
+              {copiedChat ? (
+                <CheckCircle className="w-4 h-4 mr-2 text-success" />
+              ) : (
+                <Copy className="w-4 h-4 mr-2" />
+              )}
+              {copiedChat ? 'Copied!' : 'Copy'}
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={copyChat}
+              disabled={messages.length === 0}
+              className="sm:hidden"
+              title="Copy chat"
+            >
+              {copiedChat ? (
+                <CheckCircle className="w-4 h-4 text-success" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={downloadChat}
               disabled={messages.length === 0}
               className="hidden sm:flex"
             >
               <Download className="w-4 h-4 mr-2" />
-              Save Chat
+              Save
             </Button>
             <Button
               variant="outline"

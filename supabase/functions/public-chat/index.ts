@@ -22,7 +22,7 @@ serve(async (req) => {
     // HARD-DISABLE CHECK: First validate the token exists
     const { data: linkCheck, error: checkError } = await supabase
       .from('share_links')
-      .select('id, revoked, token')
+      .select('id, revoked, token, expires_at')
       .eq('token', token)
       .single();
 
@@ -32,9 +32,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         valid: false, 
         disabled: false,
+        expired: false,
         message: 'This link is invalid.' 
       }), {
         status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // EXPIRATION CHECK: If expires_at is set and in the past, return 403 immediately
+    // NO OpenAI calls, NO DB document queries, NO vector store searches
+    if (linkCheck.expires_at && new Date(linkCheck.expires_at) < new Date()) {
+      console.log(`[DENIED] Expired link access attempt | link_id: ${linkCheck.id} | expired_at: ${linkCheck.expires_at} | timestamp: ${new Date().toISOString()}`);
+      return new Response(JSON.stringify({ 
+        valid: false, 
+        disabled: false,
+        expired: true,
+        message: 'This link has expired.' 
+      }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -46,6 +62,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         valid: false, 
         disabled: true,
+        expired: false,
         message: 'This link is disabled.' 
       }), {
         status: 403,
