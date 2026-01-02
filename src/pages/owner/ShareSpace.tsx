@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Link2, Copy, Trash2, Loader2, Plus, 
-  CheckCircle, XCircle, ExternalLink, Share2, QrCode 
+  CheckCircle, XCircle, ExternalLink, Share2, QrCode, Pencil
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 
@@ -37,6 +37,12 @@ export default function ShareSpace() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrLink, setQrLink] = useState<ShareLink | null>(null);
+  
+  // Edit name state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState<ShareLink | null>(null);
+  const [editName, setEditName] = useState('');
+  const [savingName, setSavingName] = useState(false);
   
   const { toast } = useToast();
 
@@ -173,6 +179,46 @@ export default function ShareSpace() {
     }
   };
 
+  const handleEditName = (link: ShareLink) => {
+    setEditingLink(link);
+    setEditName(link.name || '');
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveName = async () => {
+    if (!editingLink) return;
+    
+    setSavingName(true);
+    try {
+      const { error } = await supabase
+        .from('share_links')
+        .update({ name: editName.trim() || null })
+        .eq('id', editingLink.id);
+
+      if (error) throw error;
+
+      setShareLinks(prev =>
+        prev.map(l => l.id === editingLink.id ? { ...l, name: editName.trim() || null } : l)
+      );
+
+      setEditDialogOpen(false);
+      setEditingLink(null);
+
+      toast({
+        title: 'Name updated',
+        description: 'The link name has been updated',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update link name',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -290,6 +336,15 @@ export default function ShareSpace() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{link.name || 'Unnamed Link'}</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleEditName(link)}
+                          title="Edit name"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Button>
                         {link.revoked ? (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive font-medium">
                             Revoked
@@ -383,6 +438,37 @@ export default function ShareSpace() {
             title={qrLink.name ? `QR: ${qrLink.name}` : 'Share QR Code'}
           />
         )}
+
+        {/* Edit Name Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display">Edit Link Name</DialogTitle>
+              <DialogDescription>
+                Give this link a memorable name
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="editLinkName">Link Name</Label>
+                <Input
+                  id="editLinkName"
+                  placeholder="e.g., Public Access"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+              <Button 
+                onClick={handleSaveName} 
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={savingName}
+              >
+                {savingName && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Save Name
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

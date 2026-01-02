@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -21,7 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Settings, LogOut, Loader2, Camera } from 'lucide-react';
+import { Settings, LogOut, Loader2, Camera, MessageCircle, Mail, Phone, Linkedin } from 'lucide-react';
+import { FeedbackModal } from '@/components/FeedbackModal';
 
 interface ProfileData {
   id: string;
@@ -29,6 +31,12 @@ interface ProfileData {
   email: string | null;
   avatar_url: string | null;
 }
+
+const CONTACT_INFO = {
+  email: 'bandaru.harshavardhan17@gmail.com',
+  phone: '+1 6317100432',
+  linkedin: 'https://www.linkedin.com/in/bandaruharshavardhan17/',
+};
 
 export function ProfileDropdown() {
   const { user, signOut } = useAuth();
@@ -40,6 +48,7 @@ export function ProfileDropdown() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -208,7 +217,7 @@ export function ProfileDropdown() {
       </DropdownMenu>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Profile Settings</DialogTitle>
             <DialogDescription>
@@ -278,9 +287,64 @@ export function ProfileDropdown() {
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Save Changes
             </Button>
+
+            <Separator />
+
+            {/* Send Feedback Button */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setDialogOpen(false);
+                setFeedbackOpen(true);
+              }}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Send feedback / request a feature
+            </Button>
+
+            <Separator />
+
+            {/* Contact Developer Section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-muted-foreground">Contact Developer</h4>
+              <div className="space-y-2">
+                <a
+                  href={`mailto:${CONTACT_INFO.email}`}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors text-sm"
+                >
+                  <Mail className="w-4 h-4 text-primary" />
+                  <span>{CONTACT_INFO.email}</span>
+                </a>
+                <a
+                  href={`tel:${CONTACT_INFO.phone}`}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors text-sm"
+                >
+                  <Phone className="w-4 h-4 text-success" />
+                  <span>{CONTACT_INFO.phone}</span>
+                </a>
+                <a
+                  href={CONTACT_INFO.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors text-sm"
+                >
+                  <Linkedin className="w-4 h-4 text-info" />
+                  <span>LinkedIn Profile</span>
+                </a>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        defaultContext="feedback"
+        screenName="Profile Settings"
+      />
     </>
   );
 }

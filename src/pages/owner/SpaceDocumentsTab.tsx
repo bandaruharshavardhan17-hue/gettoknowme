@@ -11,7 +11,8 @@ import {
   Upload, FileText, StickyNote, Loader2, Trash2, 
   CheckCircle, XCircle, Clock, Sparkles, File, Image,
   PenLine, Link, Copy, ExternalLink, Mic, MicOff, QrCode,
-  Eye, Pencil, ChevronDown, ChevronUp, Download, Bot
+  Eye, Pencil, ChevronDown, ChevronUp, Download, Bot,
+  Globe, RefreshCw
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
@@ -36,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { FeedbackModal } from '@/components/FeedbackModal';
 
 type DocumentStatus = 'uploading' | 'indexing' | 'ready' | 'failed';
 
@@ -91,6 +93,13 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [savingVoice, setSavingVoice] = useState(false);
   
+  // URL scraping state
+  const [urlInput, setUrlInput] = useState('');
+  const [urlTitle, setUrlTitle] = useState('');
+  const [scrapingUrl, setScrapingUrl] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  
   // Share link state
   const [creatingLink, setCreatingLink] = useState(false);
   const [existingLinkToken, setExistingLinkToken] = useState<string | null>(null);
@@ -108,6 +117,12 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   const [savingEdit, setSavingEdit] = useState(false);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  
+  // Replace document state
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [replacingDoc, setReplacingDoc] = useState<Document | null>(null);
+  const [replacingFile, setReplacingFile] = useState(false);
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
   
   // AI instructions section open state
   const [aiSectionOpen, setAiSectionOpen] = useState(true);
@@ -442,6 +457,105 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
     }
   };
 
+  const handleUrlScrape = async () => {
+    if (!urlInput.trim()) {
+      toast({ title: 'Error', description: 'Please enter a URL', variant: 'destructive' });
+      return;
+    }
+
+    setScrapingUrl(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-url', {
+        body: { 
+          space_id: spaceId, 
+          url: urlInput.trim(), 
+          title: urlTitle.trim() || undefined 
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        // Check for login required error
+        if (data.error.startsWith('LOGIN_REQUIRED')) {
+          setFeedbackMessage(`Unable to scrape ${urlInput} - the page requires login. Please request support for this URL.`);
+          setFeedbackOpen(true);
+          return;
+        }
+        throw new Error(data.error);
+      }
+
+      // Refresh documents to show the new one
+      await fetchDocuments();
+      setUrlInput('');
+      setUrlTitle('');
+      toast({ 
+        title: 'URL scraped successfully', 
+        description: `Content from "${data?.document?.filename || 'URL'}" has been added` 
+      });
+    } catch (error: any) {
+      console.error('URL scrape error:', error);
+      toast({ 
+        title: 'Error', 
+        description: error.message || 'Failed to scrape URL', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setScrapingUrl(false);
+    }
+  };
+
+  const handleReplaceDocument = async (file: File) => {
+    if (!replacingDoc || !user) return;
+
+    setReplacingFile(true);
+    try {
+      const fileType = getFileType(file.name);
+      const filePath = `${user.id}/${spaceId}/${Date.now()}-${file.name}`;
+
+      // Upload new file
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Update document record
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({
+          filename: file.name,
+          file_type: fileType,
+          file_path: filePath,
+          status: 'indexing' as DocumentStatus,
+          error_message: null,
+        })
+        .eq('id', replacingDoc.id);
+
+      if (updateError) throw updateError;
+
+      // Trigger reprocessing
+      supabase.functions.invoke('process-document', {
+        body: { documentId: replacingDoc.id }
+      }).catch(console.error);
+
+      // Update local state
+      setDocuments(prev => prev.map(d =>
+        d.id === replacingDoc.id
+          ? { ...d, filename: file.name, file_type: fileType, file_path: filePath, status: 'indexing' as DocumentStatus }
+          : d
+      ));
+
+      setReplaceDialogOpen(false);
+      setReplacingDoc(null);
+      toast({ title: 'Document replaced', description: `"${file.name}" is being processed` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to replace document', variant: 'destructive' });
+    } finally {
+      setReplacingFile(false);
+    }
+  };
+
   const handleEditDocument = async () => {
     if (!selectedDoc || !editTitle.trim()) return;
     
@@ -591,7 +705,7 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
         </CardHeader>
         <CardContent>
           <Tabs value={activeInputTab} onValueChange={setActiveInputTab}>
-            <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsList className="grid w-full grid-cols-4 mb-4">
               <TabsTrigger value="upload" className="text-xs sm:text-sm">
                 <Upload className="w-4 h-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Upload</span>
@@ -603,6 +717,10 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
               <TabsTrigger value="voice" className="text-xs sm:text-sm">
                 <Mic className="w-4 h-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Voice</span>
+              </TabsTrigger>
+              <TabsTrigger value="url" className="text-xs sm:text-sm">
+                <Globe className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">URL</span>
               </TabsTrigger>
             </TabsList>
 
@@ -678,6 +796,39 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
                 {savingVoice && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Save Voice Note
               </Button>
+            </TabsContent>
+
+            {/* URL Tab */}
+            <TabsContent value="url" className="mt-0 space-y-4">
+              <div className="space-y-2">
+                <Label>URL to Scrape</Label>
+                <Input 
+                  type="url"
+                  placeholder="https://example.com/page"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Title (optional)</Label>
+                <Input 
+                  placeholder="e.g., Company About Page"
+                  value={urlTitle}
+                  onChange={(e) => setUrlTitle(e.target.value)}
+                />
+              </div>
+              <Button 
+                onClick={handleUrlScrape} 
+                disabled={scrapingUrl || !urlInput.trim()}
+                className="w-full gradient-primary text-primary-foreground"
+              >
+                {scrapingUrl && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                <Globe className="w-4 h-4 mr-2" />
+                Scrape URL
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Extract and index content from a web page
+              </p>
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -867,6 +1018,22 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
                       </Button>
                     )}
                     
+                    {/* Replace button (only for uploaded files, not notes) */}
+                    {doc.file_type !== 'note' && doc.file_path && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Replace file"
+                        onClick={() => {
+                          setReplacingDoc(doc);
+                          setReplaceDialogOpen(true);
+                        }}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                    )}
+                    
                     {/* Delete button */}
                     <Button
                       variant="ghost"
@@ -1051,6 +1218,59 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
           title="Share Chat Link"
         />
       )}
+
+      {/* Replace Document Dialog */}
+      <Dialog open={replaceDialogOpen} onOpenChange={setReplaceDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <RefreshCw className="w-5 h-5" />
+              Replace Document
+            </DialogTitle>
+            <DialogDescription>
+              Upload a new file to replace "{replacingDoc?.filename}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <input
+              ref={replaceFileInputRef}
+              type="file"
+              accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleReplaceDocument(file);
+              }}
+            />
+            <div 
+              className="border-2 border-dashed border-border/50 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => replaceFileInputRef.current?.click()}
+            >
+              <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="font-medium mb-1">Click to select new file</p>
+              <p className="text-sm text-muted-foreground">PDF, TXT, PNG, JPG, WEBP, GIF</p>
+              {replacingFile && (
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Uploading...</span>
+                </div>
+              )}
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => setReplaceDialogOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback Modal for URL scraping issues */}
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        defaultContext="feature_request"
+        defaultMessage={feedbackMessage}
+        screenName="SpaceDocuments"
+      />
     </div>
   );
 }
