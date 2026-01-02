@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Link2, Copy, Trash2, Loader2, Plus, 
-  CheckCircle, XCircle, ExternalLink, Share2, QrCode, Pencil
+  CheckCircle, XCircle, ExternalLink, Share2, QrCode, Pencil,
+  AlertTriangle
 } from 'lucide-react';
 import { QRCodeDialog } from '@/components/QRCodeDialog';
 
@@ -37,6 +39,7 @@ export default function ShareSpace() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrLink, setQrLink] = useState<ShareLink | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   
   // Edit name state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -116,6 +119,15 @@ export default function ShareSpace() {
   };
 
   const handleCopyLink = async (link: ShareLink) => {
+    if (link.revoked) {
+      toast({
+        title: 'Link disabled',
+        description: 'Enable the link first to copy it',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     const url = `${window.location.origin}/s/${link.token}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(link.id);
@@ -127,24 +139,27 @@ export default function ShareSpace() {
     });
   };
 
-  const handleRevokeLink = async (link: ShareLink) => {
+  const handleToggleEnabled = async (link: ShareLink) => {
+    setTogglingId(link.id);
+    const newRevoked = !link.revoked;
+    
     try {
       const { error } = await supabase
         .from('share_links')
-        .update({ revoked: !link.revoked })
+        .update({ revoked: newRevoked })
         .eq('id', link.id);
 
       if (error) throw error;
 
       setShareLinks(prev => 
-        prev.map(l => l.id === link.id ? { ...l, revoked: !l.revoked } : l)
+        prev.map(l => l.id === link.id ? { ...l, revoked: newRevoked } : l)
       );
 
       toast({
-        title: link.revoked ? 'Link restored' : 'Link revoked',
-        description: link.revoked 
-          ? 'People can use this link again' 
-          : 'People can no longer use this link',
+        title: newRevoked ? 'Link disabled' : 'Link enabled',
+        description: newRevoked 
+          ? 'Visitors will see an error when accessing this link' 
+          : 'Link is now active and accessible',
       });
     } catch (error) {
       toast({
@@ -152,6 +167,8 @@ export default function ShareSpace() {
         description: 'Failed to update link',
         variant: 'destructive',
       });
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -217,6 +234,18 @@ export default function ShareSpace() {
     } finally {
       setSavingName(false);
     }
+  };
+
+  const handleOpenLink = (link: ShareLink) => {
+    if (link.revoked) {
+      toast({
+        title: 'Link disabled',
+        description: 'Enable the link first to open it',
+        variant: 'destructive',
+      });
+      return;
+    }
+    window.open(`/s/${link.token}`, '_blank');
   };
 
   if (loading) {
@@ -322,19 +351,23 @@ export default function ShareSpace() {
             {shareLinks.map((link, index) => (
               <Card 
                 key={link.id} 
-                className={`animate-fade-in transition-colors ${link.revoked ? 'opacity-60' : 'hover:border-primary/30'}`}
+                className={`animate-fade-in transition-all ${link.revoked ? 'opacity-60 bg-muted/30' : 'hover:border-primary/30'}`}
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                      link.revoked ? 'bg-muted text-muted-foreground' : 'bg-primary/20 text-primary'
+                      link.revoked ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'
                     }`}>
-                      <Link2 className="w-5 h-5" />
+                      {link.revoked ? (
+                        <AlertTriangle className="w-5 h-5" />
+                      ) : (
+                        <Link2 className="w-5 h-5" />
+                      )}
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium">{link.name || 'Unnamed Link'}</p>
                         <Button
                           variant="ghost"
@@ -347,7 +380,7 @@ export default function ShareSpace() {
                         </Button>
                         {link.revoked ? (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive font-medium">
-                            Revoked
+                            Disabled
                           </span>
                         ) : (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success font-medium">
@@ -360,13 +393,15 @@ export default function ShareSpace() {
                         <Input
                           readOnly
                           value={`${window.location.origin}/s/${link.token}`}
-                          className="text-sm bg-muted/50 font-mono"
+                          className={`text-sm font-mono ${link.revoked ? 'bg-muted text-muted-foreground' : 'bg-muted/50'}`}
                         />
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => handleCopyLink(link)}
                           className="shrink-0"
+                          disabled={link.revoked}
+                          title={link.revoked ? 'Enable link to copy' : 'Copy link'}
                         >
                           {copiedId === link.id ? (
                             <CheckCircle className="w-4 h-4 text-success" />
@@ -378,25 +413,33 @@ export default function ShareSpace() {
                           variant="outline"
                           size="icon"
                           onClick={() => {
+                            if (link.revoked) {
+                              toast({
+                                title: 'Link disabled',
+                                description: 'Enable the link first to show QR code',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
                             setQrLink(link);
                             setQrDialogOpen(true);
                           }}
                           className="shrink-0"
-                          title="Show QR Code"
+                          disabled={link.revoked}
+                          title={link.revoked ? 'Enable link to show QR' : 'Show QR Code'}
                         >
                           <QrCode className="w-4 h-4" />
                         </Button>
-                        {!link.revoked && (
-                          <a
-                            href={`/s/${link.token}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Button variant="outline" size="icon" className="shrink-0">
-                              <ExternalLink className="w-4 h-4" />
-                            </Button>
-                          </a>
-                        )}
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="shrink-0"
+                          onClick={() => handleOpenLink(link)}
+                          disabled={link.revoked}
+                          title={link.revoked ? 'Enable link to open' : 'Open link'}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
                       </div>
 
                       <p className="text-xs text-muted-foreground mt-2">
@@ -404,20 +447,30 @@ export default function ShareSpace() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRevokeLink(link)}
-                        className={link.revoked ? 'text-success' : 'text-destructive'}
-                      >
-                        {link.revoked ? 'Restore' : 'Revoke'}
-                      </Button>
+                    <div className="flex flex-col items-end gap-3 shrink-0">
+                      {/* Enable/Disable Toggle */}
+                      <div className="flex items-center gap-2">
+                        <Label 
+                          htmlFor={`toggle-${link.id}`} 
+                          className={`text-xs ${link.revoked ? 'text-destructive' : 'text-muted-foreground'}`}
+                        >
+                          {link.revoked ? 'Disabled' : 'Enabled'}
+                        </Label>
+                        <Switch
+                          id={`toggle-${link.id}`}
+                          checked={!link.revoked}
+                          onCheckedChange={() => handleToggleEnabled(link)}
+                          disabled={togglingId === link.id}
+                        />
+                      </div>
+                      
+                      {/* Delete Button */}
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDeleteLink(link)}
-                        className="text-muted-foreground hover:text-destructive"
+                        className="text-muted-foreground hover:text-destructive h-8 w-8"
+                        title="Delete link"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

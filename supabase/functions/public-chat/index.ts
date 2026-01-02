@@ -19,7 +19,41 @@ serve(async (req) => {
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Validate token
+    // HARD-DISABLE CHECK: First validate the token exists
+    const { data: linkCheck, error: checkError } = await supabase
+      .from('share_links')
+      .select('id, revoked, token')
+      .eq('token', token)
+      .single();
+
+    // If link not found at all
+    if (checkError || !linkCheck) {
+      console.log(`[DENIED] Invalid token attempt: ${token?.slice(0, 8)}...`);
+      return new Response(JSON.stringify({ 
+        valid: false, 
+        disabled: false,
+        message: 'This link is invalid.' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // HARD-DISABLE CHECK: If link is revoked/disabled, return 403 immediately
+    // NO OpenAI calls, NO DB document queries, NO vector store searches
+    if (linkCheck.revoked) {
+      console.log(`[DENIED] Disabled link access attempt | link_id: ${linkCheck.id} | timestamp: ${new Date().toISOString()}`);
+      return new Response(JSON.stringify({ 
+        valid: false, 
+        disabled: true,
+        message: 'This link is disabled.' 
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Now fetch full share link data with space info (only for non-revoked links)
     const { data: shareLink, error: linkError } = await supabase
       .from('share_links')
       .select('*, spaces(id, name, description, openai_vector_store_id, ai_model)')
@@ -28,6 +62,7 @@ serve(async (req) => {
       .single();
 
     if (linkError || !shareLink) {
+      console.log(`[DENIED] Link validation failed: ${token?.slice(0, 8)}...`);
       return new Response(JSON.stringify({ 
         valid: false, 
         message: 'This link is invalid or has been revoked' 
@@ -46,8 +81,11 @@ serve(async (req) => {
         })
         .eq('id', shareLink.id);
 
+      console.log(`[ACCESS] Valid link accessed | link_id: ${shareLink.id} | space: ${shareLink.spaces.name}`);
+
       return new Response(JSON.stringify({ 
         valid: true, 
+        disabled: false,
         space: { 
           name: shareLink.spaces.name, 
           description: shareLink.spaces.description 
