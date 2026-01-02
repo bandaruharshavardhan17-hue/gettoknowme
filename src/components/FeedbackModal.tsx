@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Send } from 'lucide-react';
 
-export type FeedbackContext = 'feedback' | 'feature_request' | 'auth_error' | 'app_error';
+export type FeedbackContext = 'feedback' | 'feature_request' | 'auth_error' | 'app_error' | 'public_chat_error' | 'public_chat_offline';
 
 interface FeedbackModalProps {
   open: boolean;
@@ -42,6 +42,8 @@ const CONTEXT_OPTIONS: { value: FeedbackContext; label: string }[] = [
   { value: 'feature_request', label: 'Feature Request' },
   { value: 'auth_error', label: 'Login/Auth Issue' },
   { value: 'app_error', label: 'App Error/Bug' },
+  { value: 'public_chat_error', label: 'Public Chat Error' },
+  { value: 'public_chat_offline', label: 'Public Chat Offline Issue' },
 ];
 
 // Get device and browser info
