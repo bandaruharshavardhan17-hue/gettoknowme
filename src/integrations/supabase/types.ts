@@ -99,40 +99,73 @@ export type Database = {
           content_text: string | null
           created_at: string
           error_message: string | null
+          extraction_quality: string | null
+          extraction_warnings: Json | null
           file_path: string | null
           file_type: string
           filename: string
           id: string
+          is_image_only: boolean | null
+          ocr_confidence: number | null
           openai_file_id: string | null
+          page_domain: string | null
+          page_excerpt: string | null
+          page_thumbnail_url: string | null
+          page_title: string | null
+          source_url: string | null
           space_id: string
           status: Database["public"]["Enums"]["document_status"]
+          text_length: number | null
           updated_at: string
+          visibility: string | null
         }
         Insert: {
           content_text?: string | null
           created_at?: string
           error_message?: string | null
+          extraction_quality?: string | null
+          extraction_warnings?: Json | null
           file_path?: string | null
           file_type: string
           filename: string
           id?: string
+          is_image_only?: boolean | null
+          ocr_confidence?: number | null
           openai_file_id?: string | null
+          page_domain?: string | null
+          page_excerpt?: string | null
+          page_thumbnail_url?: string | null
+          page_title?: string | null
+          source_url?: string | null
           space_id: string
           status?: Database["public"]["Enums"]["document_status"]
+          text_length?: number | null
           updated_at?: string
+          visibility?: string | null
         }
         Update: {
           content_text?: string | null
           created_at?: string
           error_message?: string | null
+          extraction_quality?: string | null
+          extraction_warnings?: Json | null
           file_path?: string | null
           file_type?: string
           filename?: string
           id?: string
+          is_image_only?: boolean | null
+          ocr_confidence?: number | null
           openai_file_id?: string | null
+          page_domain?: string | null
+          page_excerpt?: string | null
+          page_thumbnail_url?: string | null
+          page_title?: string | null
+          source_url?: string | null
           space_id?: string
           status?: Database["public"]["Enums"]["document_status"]
+          text_length?: number | null
           updated_at?: string
+          visibility?: string | null
         }
         Relationships: [
           {
@@ -268,33 +301,60 @@ export type Database = {
       }
       spaces: {
         Row: {
+          ai_audience: string | null
+          ai_do_not_mention: string | null
+          ai_fallback_message: string | null
           ai_model: string | null
+          ai_persona_style: string | null
+          ai_tone: string | null
           created_at: string
           description: string | null
+          entity_index: Json | null
           id: string
           name: string
           openai_vector_store_id: string | null
           owner_id: string
+          space_summary: string | null
+          space_type: string | null
+          timeline: Json | null
           updated_at: string
         }
         Insert: {
+          ai_audience?: string | null
+          ai_do_not_mention?: string | null
+          ai_fallback_message?: string | null
           ai_model?: string | null
+          ai_persona_style?: string | null
+          ai_tone?: string | null
           created_at?: string
           description?: string | null
+          entity_index?: Json | null
           id?: string
           name: string
           openai_vector_store_id?: string | null
           owner_id: string
+          space_summary?: string | null
+          space_type?: string | null
+          timeline?: Json | null
           updated_at?: string
         }
         Update: {
+          ai_audience?: string | null
+          ai_do_not_mention?: string | null
+          ai_fallback_message?: string | null
           ai_model?: string | null
+          ai_persona_style?: string | null
+          ai_tone?: string | null
           created_at?: string
           description?: string | null
+          entity_index?: Json | null
           id?: string
           name?: string
           openai_vector_store_id?: string | null
           owner_id?: string
+          space_summary?: string | null
+          space_type?: string | null
+          timeline?: Json | null
           updated_at?: string
         }
         Relationships: [

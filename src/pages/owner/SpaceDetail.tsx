@@ -5,16 +5,24 @@ import { ImpersonationBanner } from '@/components/ImpersonationBanner';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, FileText, BarChart3, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, BarChart3, MessageSquare, Settings } from 'lucide-react';
 import SpaceDocumentsTab from './SpaceDocumentsTab';
 import SpaceAnalyticsTab from './SpaceAnalyticsTab';
 import SpaceChatHistoryTab from './SpaceChatHistoryTab';
+import SpaceSettingsTab from './SpaceSettingsTab';
+import SpaceHealthPanel from './SpaceHealthPanel';
 
 interface Space {
   id: string;
   name: string;
   description: string | null;
   ai_model: string | null;
+  ai_fallback_message: string | null;
+  ai_persona_style: string | null;
+  ai_tone: string | null;
+  ai_audience: string | null;
+  ai_do_not_mention: string | null;
+  space_type: string | null;
 }
 
 export default function SpaceDetail() {
@@ -83,7 +91,7 @@ export default function SpaceDetail() {
 
       <main className="container px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="documents" className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Documents</span>
@@ -96,7 +104,13 @@ export default function SpaceDetail() {
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              <span>Analytics</span>
+              <span className="hidden sm:inline">Analytics</span>
+              <span className="sm:hidden">Stats</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
+              <span className="sm:hidden">AI</span>
             </TabsTrigger>
           </TabsList>
 
@@ -110,6 +124,27 @@ export default function SpaceDetail() {
           
           <TabsContent value="analytics">
             <SpaceAnalyticsTab spaceId={spaceId!} />
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <SpaceSettingsTab 
+                  spaceId={spaceId!} 
+                  initialSettings={{
+                    ai_fallback_message: space.ai_fallback_message,
+                    ai_persona_style: space.ai_persona_style,
+                    ai_tone: space.ai_tone,
+                    ai_audience: space.ai_audience,
+                    ai_do_not_mention: space.ai_do_not_mention,
+                    space_type: space.space_type,
+                  }}
+                />
+              </div>
+              <div>
+                <SpaceHealthPanel spaceId={spaceId!} />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </main>

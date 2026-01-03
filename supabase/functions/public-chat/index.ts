@@ -41,9 +41,8 @@ serve(async (req) => {
     }
 
     // EXPIRATION CHECK: If expires_at is set and in the past, return 403 immediately
-    // NO OpenAI calls, NO DB document queries, NO vector store searches
     if (linkCheck.expires_at && new Date(linkCheck.expires_at) < new Date()) {
-      console.log(`[DENIED] Expired link access attempt | link_id: ${linkCheck.id} | expired_at: ${linkCheck.expires_at} | timestamp: ${new Date().toISOString()}`);
+      console.log(`[DENIED] Expired link access attempt | link_id: ${linkCheck.id} | expired_at: ${linkCheck.expires_at}`);
       return new Response(JSON.stringify({ 
         valid: false, 
         disabled: false,
@@ -56,9 +55,8 @@ serve(async (req) => {
     }
 
     // HARD-DISABLE CHECK: If link is revoked/disabled, return 403 immediately
-    // NO OpenAI calls, NO DB document queries, NO vector store searches
     if (linkCheck.revoked) {
-      console.log(`[DENIED] Disabled link access attempt | link_id: ${linkCheck.id} | timestamp: ${new Date().toISOString()}`);
+      console.log(`[DENIED] Disabled link access attempt | link_id: ${linkCheck.id}`);
       return new Response(JSON.stringify({ 
         valid: false, 
         disabled: true,
@@ -73,7 +71,10 @@ serve(async (req) => {
     // Now fetch full share link data with space info (only for non-revoked links)
     const { data: shareLink, error: linkError } = await supabase
       .from('share_links')
-      .select('*, spaces(id, name, description, openai_vector_store_id, ai_model, owner_id)')
+      .select(`*, spaces(
+        id, name, description, openai_vector_store_id, ai_model, owner_id,
+        ai_fallback_message, ai_persona_style, ai_tone, ai_audience, ai_do_not_mention
+      )`)
       .eq('token', token)
       .eq('revoked', false)
       .single();
@@ -121,6 +122,13 @@ serve(async (req) => {
       const aiModel = shareLink.spaces.ai_model || 'gpt-4o-mini';
       const ownerId = shareLink.spaces.owner_id;
 
+      // Fetch persona settings from space
+      const personaStyle = shareLink.spaces.ai_persona_style || '';
+      const tone = shareLink.spaces.ai_tone || '';
+      const audience = shareLink.spaces.ai_audience || '';
+      const doNotMention = shareLink.spaces.ai_do_not_mention || '';
+      const fallbackMessage = shareLink.spaces.ai_fallback_message;
+
       // Fetch owner's display name for personalized fallback
       let ownerName = 'the owner';
       if (ownerId) {
@@ -136,16 +144,18 @@ serve(async (req) => {
 
       // Build personalized fallback response
       const defaultFallback = `I don't have that information in the provided documents. Please reach out to ${ownerName} for more details.`;
-      const ownerInstructions = shareLink.spaces.description || defaultFallback;
+      const finalFallback = fallbackMessage || defaultFallback;
 
       console.log('Using vector store:', vectorStoreId || 'none (using local content)');
       console.log('Space ID:', shareLink.spaces.id);
 
-      // Get document content from our database as fallback/supplement
+      // Get document content from our database - ONLY PUBLIC visibility for public chat
       const { data: documents } = await supabase
         .from('documents')
-        .select('filename, content_text')
-        .eq('space_id', shareLink.spaces.id);
+        .select('id, filename, content_text, created_at, visibility')
+        .eq('space_id', shareLink.spaces.id)
+        .or('visibility.eq.public,visibility.is.null')
+        .order('created_at', { ascending: false });
       
       // Check if there are any documents at all
       if ((!documents || documents.length === 0) && !vectorStoreId) {
@@ -157,32 +167,31 @@ serve(async (req) => {
         });
       }
 
-      // Also get document content where available
-      const { data: docWithContent } = await supabase
-        .from('documents')
-        .select('filename, content_text')
-        .eq('space_id', shareLink.spaces.id)
-        .not('content_text', 'is', null);
-
-      // Also get chunks for more content
-      const { data: chunks } = await supabase
-        .from('document_chunks')
-        .select('content, documents!inner(space_id)')
-        .eq('documents.space_id', shareLink.spaces.id)
-        .limit(20);
-
+      // Build document context with source tracking for citations
       let documentContext = '';
+      const docSources: { id: string; filename: string; excerpt: string }[] = [];
       
-      // Add document content
-      if (docWithContent && docWithContent.length > 0) {
-        for (const doc of docWithContent) {
+      if (documents && documents.length > 0) {
+        for (const doc of documents) {
           if (doc.content_text) {
-            documentContext += `\n--- ${doc.filename} ---\n${doc.content_text}\n`;
+            documentContext += `\n--- [Document: ${doc.filename}] ---\n${doc.content_text}\n`;
+            docSources.push({
+              id: doc.id,
+              filename: doc.filename,
+              excerpt: doc.content_text.slice(0, 100),
+            });
           }
         }
       }
 
-      // Add chunk content
+      // Also get chunks for more content
+      const { data: chunks } = await supabase
+        .from('document_chunks')
+        .select('content, documents!inner(space_id, filename, visibility)')
+        .eq('documents.space_id', shareLink.spaces.id)
+        .or('documents.visibility.eq.public,documents.visibility.is.null')
+        .limit(20);
+
       if (chunks && chunks.length > 0) {
         documentContext += '\n--- Additional Content ---\n';
         for (const chunk of chunks) {
@@ -241,12 +250,28 @@ serve(async (req) => {
       const allContext = (vectorContext + documentContext).trim();
       console.log('Total context length:', allContext.length);
 
-      // Build the system prompt
+      // Build persona instructions
+      let personaInstructions = '';
+      if (personaStyle) {
+        personaInstructions += `\nPERSONA STYLE: ${personaStyle}`;
+      }
+      if (tone) {
+        personaInstructions += `\nTONE: Respond in a ${tone} tone.`;
+      }
+      if (audience) {
+        personaInstructions += `\nAUDIENCE: The audience is ${audience}. Adjust your language and explanations accordingly.`;
+      }
+      if (doNotMention) {
+        personaInstructions += `\nDO NOT MENTION: Never discuss or reference the following topics: ${doNotMention}`;
+      }
+
+      // Build the system prompt with persona settings
       let systemPrompt: string;
       
       if (allContext.length > 100) {
-        systemPrompt = `You are a helpful AI assistant. Answer questions based ONLY on the following document content:
+        systemPrompt = `You are a helpful AI assistant.${personaInstructions}
 
+DOCUMENT CONTEXT:
 ---DOCUMENTS---
 ${allContext.slice(0, 15000)}
 ---END DOCUMENTS---
@@ -254,13 +279,17 @@ ${allContext.slice(0, 15000)}
 CRITICAL RULES:
 1. Answer ONLY based on the document content above.
 2. For personal questions (name, experience, skills, education), find the info in the documents and answer as if YOU are that person.
-3. Example: If documents show "Harsha Vardhan Bandaru" as the name, and user asks "What's your name?", say "My name is Harsha Vardhan Bandaru."
+3. Example: If documents show "John Smith" as the name, and user asks "What's your name?", say "My name is John Smith."
 4. Be conversational and helpful.
-5. If the specific info is NOT in the documents, say: "${ownerInstructions}"
-6. Never make up information not in the documents.`;
+5. When providing information, cite the source document: "Based on [Document Name]..."
+6. If information could be outdated or documents have conflicting info, mention this and ask for clarification if needed.
+7. If the specific info is NOT in the documents, say: "${finalFallback}"
+8. Never make up information not in the documents.`;
       } else {
-        systemPrompt = `You are a helpful AI assistant. No document content was found for this query.
-Your response should be: "${ownerInstructions}"`;
+        systemPrompt = `You are a helpful AI assistant.${personaInstructions}
+
+No document content was found for this query.
+Your response should be: "${finalFallback}"`;
       }
 
       // Build messages
