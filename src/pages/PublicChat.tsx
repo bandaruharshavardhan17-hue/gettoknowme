@@ -8,9 +8,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { WaveformIndicator } from '@/components/WaveformIndicator';
+import { SourceCard } from '@/components/SourceCard';
 import { 
   Send, Loader2, Sparkles, User, AlertCircle, BookOpen, 
-  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw, MessageCircle, Copy, CheckCircle
+  Mic, MicOff, Volume2, VolumeX, Square, Download, X, WifiOff, RefreshCw, MessageCircle, Copy, CheckCircle, Info
 } from 'lucide-react';
 import { FeedbackModal, FeedbackContext } from '@/components/FeedbackModal';
 import {
@@ -23,11 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 
 interface Message {
   role: 'user' | 'assistant' | 'error';
   content: string;
   citations?: string[];
+  usedFallback?: boolean;
   errorType?: 'rate_limit' | 'service_unavailable' | 'no_documents' | 'network' | 'unknown';
   retryCount?: number;
   pending?: boolean; // For queued messages waiting to be sent
@@ -295,11 +298,29 @@ export default function PublicChat() {
         return;
       }
 
+      // Check for non-streaming fallback response (when context is insufficient)
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const jsonResponse = await response.json();
+        if (jsonResponse.used_fallback) {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: jsonResponse.answer,
+            usedFallback: true,
+            citations: jsonResponse.citations || []
+          }]);
+          setSending(false);
+          setRetryAttempt(0);
+          return;
+        }
+      }
+
       // Stream the response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let assistantContent = '';
       let citations: string[] = [];
+      let usedFallback = false;
 
       if (reader) {
         let textBuffer = '';
@@ -325,9 +346,12 @@ export default function PublicChat() {
             try {
               const parsed = JSON.parse(jsonStr);
               
-              // Check for citations in the response
+              // Check for citations and fallback flag in the response
               if (parsed.citations) {
                 citations = parsed.citations;
+              }
+              if (parsed.used_fallback) {
+                usedFallback = true;
               }
               
               const content = parsed.choices?.[0]?.delta?.content as string | undefined;
@@ -337,10 +361,10 @@ export default function PublicChat() {
                   const last = prev[prev.length - 1];
                   if (last?.role === 'assistant') {
                     return prev.map((m, i) => 
-                      i === prev.length - 1 ? { ...m, content: assistantContent, citations } : m
+                      i === prev.length - 1 ? { ...m, content: assistantContent, citations, usedFallback } : m
                     );
                   }
-                  return [...prev, { role: 'assistant', content: assistantContent, citations }];
+                  return [...prev, { role: 'assistant', content: assistantContent, citations, usedFallback }];
                 });
               }
             } catch {
@@ -832,6 +856,14 @@ export default function PublicChat() {
                         <>
                           <p className="whitespace-pre-wrap">{message.content}</p>
                           
+                          {/* Fallback indicator */}
+                          {message.usedFallback && message.role === 'assistant' && (
+                            <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground/70">
+                              <Info className="w-3 h-3" />
+                              <span>General response</span>
+                            </div>
+                          )}
+                          
                           {/* Pending indicator for queued messages */}
                           {message.pending && (
                             <p className="text-xs mt-1 opacity-60 flex items-center gap-1">
@@ -839,14 +871,21 @@ export default function PublicChat() {
                               Waiting to send...
                             </p>
                           )}
+                          
+                          {/* Citations display */}
                           {message.citations && message.citations.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-border/30">
-                              <p className="text-xs font-medium mb-2 opacity-70">Sources:</p>
-                              <div className="space-y-1">
+                              <p className="text-xs font-medium mb-2 opacity-70 flex items-center gap-1">
+                                <BookOpen className="w-3 h-3" />
+                                Based on:
+                              </p>
+                              <div className="space-y-2">
                                 {message.citations.map((citation, i) => (
-                                  <p key={i} className="text-xs opacity-60 italic">
-                                    "{citation}"
-                                  </p>
+                                  <div key={i} className="p-2 rounded bg-background/50 border border-border/30">
+                                    <p className="text-xs opacity-80 line-clamp-2">
+                                      {citation}
+                                    </p>
+                                  </div>
                                 ))}
                               </div>
                             </div>

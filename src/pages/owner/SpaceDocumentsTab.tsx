@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { FeedbackModal } from '@/components/FeedbackModal';
+import { SourceCard } from '@/components/SourceCard';
 
 type DocumentStatus = 'uploading' | 'indexing' | 'ready' | 'failed';
 
@@ -1480,113 +1481,51 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
           
           {scrapePreview && (
             <div className="space-y-4">
-              {/* Preview Card */}
-              <div className="border rounded-lg overflow-hidden">
-                {scrapePreview.thumbnail && (
-                  <div className="aspect-video bg-muted relative">
-                    <img 
-                      src={scrapePreview.thumbnail} 
-                      alt={scrapePreview.title}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="p-3 space-y-2">
-                  <h4 className="font-medium text-sm line-clamp-2">{scrapePreview.title}</h4>
-                  {scrapePreview.excerpt && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{scrapePreview.excerpt}</p>
-                  )}
-                  {scrapePreview.domain && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Globe className="w-3 h-3" />
-                      {scrapePreview.domain}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <SourceCard
+                title={scrapePreview.title}
+                excerpt={scrapePreview.excerpt}
+                domain={scrapePreview.domain}
+                thumbnail={scrapePreview.thumbnail}
+                sourceUrl={urlInput}
+                extractionQuality={scrapePreview.page_type === 'login' || scrapePreview.page_type === 'generic' ? 'low' : undefined}
+                warnings={scrapePreview.warnings}
+                pageType={scrapePreview.page_type}
+                showActions={!scrapePreview.needs_action}
+                showWarningActions={scrapePreview.needs_action}
+                onKeep={() => {
+                  setScrapePreviewOpen(false);
+                  setScrapePreview(null);
+                  toast({ title: 'Content kept', description: 'Proceeding with limited content' });
+                }}
+                onDelete={() => {
+                  setScrapePreviewOpen(false);
+                  setUrlInput('');
+                  setUrlTitle('');
+                  setScrapePreview(null);
+                }}
+                onTryAgain={() => {
+                  setScrapePreviewOpen(false);
+                  setScrapePreview(null);
+                }}
+                onRequestSupport={() => {
+                  setFeedbackMessage(`URL scraping issue:\n\nURL: ${urlInput}\nPage Type: ${scrapePreview.page_type}\nWarnings: ${scrapePreview.warnings?.join(', ')}\n\nPlease help with accessing this content.`);
+                  setScrapePreviewOpen(false);
+                  setFeedbackOpen(true);
+                }}
+              />
 
-              {/* Warnings */}
-              {scrapePreview.warnings && scrapePreview.warnings.length > 0 && (
-                <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-                  <p className="text-xs font-medium text-warning mb-1">Warnings:</p>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    {scrapePreview.warnings.map((warning, i) => (
-                      <li key={i}>• {warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Action buttons for needs_action */}
-              {scrapePreview.needs_action ? (
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={() => {
-                      setScrapePreviewOpen(false);
-                      setUrlInput('');
-                      setUrlTitle('');
-                      setScrapePreview(null);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={() => {
-                      setScrapePreviewOpen(false);
-                      setScrapePreview(null);
-                    }}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Try Another
-                  </Button>
-                  <Button 
-                    variant="default"
-                    className="flex-1"
-                    onClick={() => {
-                      setFeedbackMessage(`URL scraping issue:\n\nURL: ${urlInput}\nPage Type: ${scrapePreview.page_type}\nWarnings: ${scrapePreview.warnings?.join(', ')}\n\nPlease help with accessing this content.`);
-                      setScrapePreviewOpen(false);
-                      setFeedbackOpen(true);
-                    }}
-                  >
-                    Request Support
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      if (scrapePreview) {
-                        navigator.clipboard.writeText(
-                          `${scrapePreview.title}\n\n${scrapePreview.excerpt || ''}\n\nSource: ${scrapePreview.domain}`
-                        );
-                        toast({ title: 'Summary copied to clipboard' });
-                      }
-                    }}
-                  >
-                    <Copy className="w-4 h-4 mr-2" />
-                    Copy Summary
-                  </Button>
-                  <Button 
-                    variant="default"
-                    className="flex-1"
-                    onClick={() => {
-                      setScrapePreviewOpen(false);
-                      setScrapePreview(null);
-                    }}
-                  >
-                    Done
-                  </Button>
-                </div>
+              {/* Done button for successful scrapes */}
+              {!scrapePreview.needs_action && (
+                <Button 
+                  variant="default"
+                  className="w-full"
+                  onClick={() => {
+                    setScrapePreviewOpen(false);
+                    setScrapePreview(null);
+                  }}
+                >
+                  Done
+                </Button>
               )}
             </div>
           )}
