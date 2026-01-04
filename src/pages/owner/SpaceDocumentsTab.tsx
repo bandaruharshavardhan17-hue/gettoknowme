@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/select';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import { SourceCard } from '@/components/SourceCard';
+import { SpaceImprovementsRow } from '@/components/SpaceImprovementsRow';
+import { BulkUploadProgress, FileUploadItem, FileUploadStatus } from '@/components/BulkUploadProgress';
 
 type DocumentStatus = 'uploading' | 'indexing' | 'ready' | 'failed';
 
@@ -151,6 +153,10 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
   
   // AI instructions section open state
   const [aiSectionOpen, setAiSectionOpen] = useState(true);
+  
+  // Bulk upload progress state
+  const [bulkUploadFiles, setBulkUploadFiles] = useState<FileUploadItem[]>([]);
+  const [showBulkProgress, setShowBulkProgress] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -371,11 +377,37 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const fileArray = Array.from(files);
+    const isBulk = fileArray.length > 1;
+    
+    // Initialize bulk progress tracking
+    if (isBulk) {
+      const initialFiles: FileUploadItem[] = fileArray.map((f, idx) => ({
+        id: `upload-${Date.now()}-${idx}`,
+        filename: f.name,
+        status: 'queued' as FileUploadStatus,
+      }));
+      setBulkUploadFiles(initialFiles);
+      setShowBulkProgress(true);
+    }
+
     setUploading(true);
     
-    for (const file of Array.from(files)) {
+    // Limit concurrent uploads to 3
+    const concurrentLimit = 3;
+    const uploadQueue = [...fileArray];
+    const activeUploads: Promise<void>[] = [];
+    
+    const processFile = async (file: File, index: number) => {
       const fileType = getFileType(file.name);
       const filePath = `${user?.id}/${spaceId}/${Date.now()}-${file.name}`;
+
+      // Update status to uploading
+      if (isBulk) {
+        setBulkUploadFiles(prev => prev.map((f, i) => 
+          i === index ? { ...f, status: 'uploading' as FileUploadStatus } : f
+        ));
+      }
 
       try {
         const { data: docData, error: docError } = await supabase
@@ -409,18 +441,52 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
 
         setDocuments(prev => [{ ...docData, status: 'indexing' as DocumentStatus }, ...prev]);
 
-        toast({
-          title: 'File uploaded',
-          description: `"${file.name}" is being processed`,
-        });
+        // Update status to done
+        if (isBulk) {
+          setBulkUploadFiles(prev => prev.map((f, i) => 
+            i === index ? { ...f, status: 'done' as FileUploadStatus } : f
+          ));
+        } else {
+          toast({
+            title: 'File uploaded',
+            description: `"${file.name}" is being processed`,
+          });
+        }
       } catch (error) {
-        toast({
-          title: 'Upload failed',
-          description: `Failed to upload "${file.name}"`,
-          variant: 'destructive',
+        // Update status to failed
+        if (isBulk) {
+          setBulkUploadFiles(prev => prev.map((f, i) => 
+            i === index ? { ...f, status: 'failed' as FileUploadStatus, error: 'Upload failed' } : f
+          ));
+        } else {
+          toast({
+            title: 'Upload failed',
+            description: `Failed to upload "${file.name}"`,
+            variant: 'destructive',
+          });
+        }
+      }
+    };
+
+    // Process files with concurrency limit
+    for (let i = 0; i < fileArray.length; i++) {
+      const uploadPromise = processFile(fileArray[i], i);
+      activeUploads.push(uploadPromise);
+      
+      if (activeUploads.length >= concurrentLimit) {
+        await Promise.race(activeUploads);
+        // Remove completed promises
+        const completed = activeUploads.filter(p => {
+          let resolved = false;
+          p.then(() => { resolved = true; }).catch(() => { resolved = true; });
+          return resolved;
         });
+        activeUploads.splice(0, completed.length);
       }
     }
+    
+    // Wait for remaining uploads
+    await Promise.all(activeUploads);
 
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -793,6 +859,20 @@ export default function SpaceDocumentsTab({ spaceId, description, aiModel }: Spa
 
   return (
     <div className="space-y-6">
+      {/* Space Improvements Row */}
+      <SpaceImprovementsRow spaceId={spaceId} />
+
+      {/* Bulk Upload Progress */}
+      {showBulkProgress && bulkUploadFiles.length > 0 && (
+        <BulkUploadProgress 
+          files={bulkUploadFiles} 
+          onClose={() => {
+            setShowBulkProgress(false);
+            setBulkUploadFiles([]);
+          }} 
+        />
+      )}
+
       {/* Chat Link Section */}
       <div className="flex items-center justify-end">
         {loadingLink ? (

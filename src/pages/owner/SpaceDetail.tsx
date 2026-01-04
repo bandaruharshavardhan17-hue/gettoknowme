@@ -11,6 +11,7 @@ import SpaceAnalyticsTab from './SpaceAnalyticsTab';
 import SpaceChatHistoryTab from './SpaceChatHistoryTab';
 import SpaceSettingsTab from './SpaceSettingsTab';
 import SpaceHealthPanel from './SpaceHealthPanel';
+import { AppAssistantBot } from '@/components/AppAssistantBot';
 
 interface Space {
   id: string;
@@ -148,6 +149,9 @@ export default function SpaceDetail() {
           </TabsContent>
         </Tabs>
       </main>
+      
+      {/* Floating assistant bot scoped to this space */}
+      <AppAssistantBot />
     </div>
   );
 }
