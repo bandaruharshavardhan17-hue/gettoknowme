@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, FolderOpen, Loader2, LogOut, Sparkles, FileText, Share2, Link2 } from 'lucide-react';
 import { AppAssistantBot } from '@/components/AppAssistantBot';
+import { QuickStartChecklist } from '@/components/QuickStartChecklist';
 
 interface Space {
   id: string;
@@ -26,6 +27,7 @@ export default function Spaces() {
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newSpace, setNewSpace] = useState({ name: '', description: '' });
+  const [hasPersona, setHasPersona] = useState(false);
   
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -52,6 +54,10 @@ export default function Spaces() {
       })) || [];
 
       setSpaces(spacesWithCount);
+
+      // Check if any space has persona configured
+      const hasAnyPersona = data?.some(s => s.ai_persona_style || s.ai_tone || s.ai_audience) || false;
+      setHasPersona(hasAnyPersona);
     } catch (error) {
       toast({
         title: 'Error',
@@ -191,8 +197,18 @@ export default function Spaces() {
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
+        </Dialog>
         </div>
+
+        {/* Quick Start Checklist */}
+        {user && !loading && (
+          <QuickStartChecklist
+            hasSpaces={spaces.length > 0}
+            hasDocuments={spaces.some(s => (s.document_count || 0) > 0)}
+            hasPersona={hasPersona}
+            userId={user.id}
+          />
+        )}
 
         {/* Spaces grid */}
         {loading ? (
