@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.scrape-url]
 verify_jwt = false
+
+[functions.app-assistant]
+verify_jwt = false

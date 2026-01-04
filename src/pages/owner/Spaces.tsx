@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, FolderOpen, Loader2, LogOut, Sparkles, FileText, Share2, Link2 } from 'lucide-react';
+import { AppAssistantBot } from '@/components/AppAssistantBot';
 
 interface Space {
   id: string;
@@ -250,6 +251,9 @@ export default function Spaces() {
           </div>
         )}
       </main>
+      
+      {/* Floating assistant bot */}
+      <AppAssistantBot />
     </div>
   );
 }
