@@ -250,6 +250,41 @@ serve(async (req) => {
       const allContext = (vectorContext + documentContext).trim();
       console.log('Total context length:', allContext.length);
 
+      // FALLBACK CHECK: If no meaningful content, return fallback immediately
+      const MIN_CONTEXT_LENGTH = 100;
+      if (allContext.length < MIN_CONTEXT_LENGTH) {
+        console.log('[FALLBACK] No relevant content found, using fallback response');
+        
+        // Save user message
+        await supabase
+          .from('chat_messages')
+          .insert({
+            share_link_id: shareLink.id,
+            space_id: shareLink.spaces.id,
+            role: 'user',
+            content: message,
+          });
+        
+        // Save fallback response
+        await supabase
+          .from('chat_messages')
+          .insert({
+            share_link_id: shareLink.id,
+            space_id: shareLink.spaces.id,
+            role: 'assistant',
+            content: finalFallback,
+            ai_model: aiModel,
+          });
+
+        return new Response(JSON.stringify({ 
+          answer: finalFallback,
+          used_fallback: true,
+          citations: []
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Build persona instructions
       let personaInstructions = '';
       if (personaStyle) {
@@ -265,11 +300,8 @@ serve(async (req) => {
         personaInstructions += `\nDO NOT MENTION: Never discuss or reference the following topics: ${doNotMention}`;
       }
 
-      // Build the system prompt with persona settings
-      let systemPrompt: string;
-      
-      if (allContext.length > 100) {
-        systemPrompt = `You are a helpful AI assistant.${personaInstructions}
+      // Build the system prompt with persona settings and STRICT fallback instruction
+      const systemPrompt = `You are a helpful AI assistant.${personaInstructions}
 
 DOCUMENT CONTEXT:
 ---DOCUMENTS---
@@ -283,14 +315,8 @@ CRITICAL RULES:
 4. Be conversational and helpful.
 5. When providing information, cite the source document: "Based on [Document Name]..."
 6. If information could be outdated or documents have conflicting info, mention this and ask for clarification if needed.
-7. If the specific info is NOT in the documents, say: "${finalFallback}"
-8. Never make up information not in the documents.`;
-      } else {
-        systemPrompt = `You are a helpful AI assistant.${personaInstructions}
-
-No document content was found for this query.
-Your response should be: "${finalFallback}"`;
-      }
+7. **STRICT FALLBACK RULE**: If the answer is NOT found in the provided documents, respond ONLY with this exact message: "${finalFallback}"
+8. Never make up information not in the documents. Do not guess or infer beyond what is explicitly stated.`;
 
       // Build messages
       const messages = [
